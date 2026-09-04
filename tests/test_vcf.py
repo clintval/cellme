@@ -163,6 +163,32 @@ def test_build_records_sorts_and_counts_drops() -> None:
     assert [record.contig for record in records] == ["1", "17"]
 
 
+def test_lifted_record_carries_original_locus_in_ucsc_format() -> None:
+    record = build_record(make_mutation(), CONTEXT, lift_position=add_offset, anchor_base=None)
+    assert record is not None
+    assert record.info["ORIGINAL_LOCUS"] == "chr17:7577022"
+
+
+def test_passthrough_record_has_no_original_locus() -> None:
+    record = build_record(make_mutation(), SAME_BUILD_CONTEXT, lift_position=None, anchor_base=None)
+    assert record is not None
+    assert "ORIGINAL_LOCUS" not in record.info
+
+
+def test_multi_base_variant_original_locus_is_a_range() -> None:
+    mutation = make_mutation(
+        reference_allele="AT",
+        variant_allele="-",
+        start_position=100,
+        end_position=101,
+        variant_class="Frame_Shift_Del",
+        variant_type="DEL",
+    )
+    record = build_record(mutation, CONTEXT, lift_position=add_offset, anchor_base=None)
+    assert record is not None
+    assert record.info["ORIGINAL_LOCUS"] == "chr17:100-101"
+
+
 def test_build_records_drops_unknown_contigs() -> None:
     mutations = [
         make_mutation(chromosome="17"),

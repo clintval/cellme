@@ -74,6 +74,12 @@ INFO_FIELDS: tuple[InfoField, ...] = (
         "Genome build of the source coordinates before any liftover",
     ),
     InfoField(
+        "ORIGINAL_LOCUS",
+        "1",
+        "String",
+        "Original locus before liftover in UCSC position format (chrom:pos) on ORIGINAL_BUILD",
+    ),
+    InfoField(
         "LIFTED",
         "0",
         "Flag",
@@ -149,6 +155,25 @@ def _format_protein_position(mutation: Mutation) -> str | None:
     return f"{start}-{end}"
 
 
+def _original_locus(mutation: Mutation) -> str:
+    """
+    Format the pre-liftover locus in UCSC position syntax.
+
+    CCLE contigs arrive without a ``chr`` prefix, so one is added. A variant
+    spanning a single base is rendered as ``chrom:pos``; a wider variant is
+    rendered as the range ``chrom:start-end`` using the original coordinates.
+
+    Args:
+        mutation: The source mutation, on the source build.
+
+    Returns:
+        The UCSC-style locus string, for example ``chr17:7577022``.
+    """
+    if mutation.start_position == mutation.end_position:
+        return f"chr{mutation.chromosome}:{mutation.start_position}"
+    return f"chr{mutation.chromosome}:{mutation.start_position}-{mutation.end_position}"
+
+
 def _build_info(
     mutation: Mutation,
     context: TrackContext,
@@ -189,6 +214,7 @@ def _build_info(
     info["SOURCE"] = f"cBioPortal CCLE {context.study}"
     info["ORIGINAL_BUILD"] = str(context.source_build)
     if lifted:
+        info["ORIGINAL_LOCUS"] = _original_locus(mutation)
         info["LIFTED"] = True
     if anchor_source is not None:
         info["ANCHOR"] = anchor_source
