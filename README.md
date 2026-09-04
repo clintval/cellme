@@ -9,9 +9,6 @@
 
 Convert a human cell line identifier into a truth-track VCF of its known mutations.
 
-> [!NOTE]
-> cellme currently supports human cell lines only.
-
 ## Introduction
 
 A truth track is a curated list of the variants a sample is expected to carry.
@@ -40,8 +37,13 @@ uv run cellme --help
 Write a GRCh38 truth track for MOLT-4 to a file:
 
 ```console
-uv run cellme "MOLT-4" --build GRCh38 --output MOLT-4.GRCh38.vcf
+uv run cellme "MOLT-4" --build GRCh38 --reference /ref/hg38.fa --output MOLT-4.GRCh38.vcf
 ```
+
+> [!IMPORTANT]
+> Always pass `--reference` with a FASTA for the build you target, as shown above.
+> It lets cellme fill correct anchor bases for insertions and deletions from the reference.
+> Without it, indel anchor bases fall back to a placeholder `N` and those records are marked `ANCHOR=reference`.
 
 The query is matched case-insensitively on the leading cell line token, so `MOLT-4`, `MOLT4`, and the full `MOLT4_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE` sample id all resolve to the same sample.
 Omit `--output` to stream the VCF to standard output.
@@ -75,8 +77,8 @@ The resulting VCF carries a full header and one record per mutation, including t
 ##INFO=<ID=LIFTED,Number=0,Type=Flag,Description="Coordinate was lifted from ORIGINAL_BUILD to the output reference build">
 ##INFO=<ID=ANCHOR,Number=1,Type=String,Description="Provenance of the indel anchor base: reference (from --reference) or placeholder (N)">
 #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
-1	6197724	RPL22:K15Rfs*5	NT	N	.	.	GENE=RPL22;PROTEIN_CHANGE=K15Rfs*5;VARIANT_CLASS=Frame_Shift_Del;VARIANT_TYPE=DEL;CELL_LINE=MOLT4;SAMPLE_ID=MOLT4_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE;ENTREZ=6146;REFSEQ=NM_000983.3;PROTEIN_POS=15;SOURCE=cBioPortal CCLE ccle_broad_2019;ORIGINAL_BUILD=GRCh37;LIFTED;ANCHOR=placeholder
-10	87958012	PTEN:K267Rfs*9	NA	N	.	.	GENE=PTEN;PROTEIN_CHANGE=K267Rfs*9;VARIANT_CLASS=Frame_Shift_Del;VARIANT_TYPE=DEL;CELL_LINE=MOLT4;SAMPLE_ID=MOLT4_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE;ENTREZ=5728;REFSEQ=NM_000314.4;PROTEIN_POS=265-267;SOURCE=cBioPortal CCLE ccle_broad_2019;ORIGINAL_BUILD=GRCh37;LIFTED;ANCHOR=placeholder
+1	6197724	RPL22:K15Rfs*5	CT	C	.	.	GENE=RPL22;PROTEIN_CHANGE=K15Rfs*5;VARIANT_CLASS=Frame_Shift_Del;VARIANT_TYPE=DEL;CELL_LINE=MOLT4;SAMPLE_ID=MOLT4_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE;ENTREZ=6146;REFSEQ=NM_000983.3;PROTEIN_POS=15;SOURCE=cBioPortal CCLE ccle_broad_2019;ORIGINAL_BUILD=GRCh37;LIFTED;ANCHOR=reference
+10	87958012	PTEN:K267Rfs*9	TA	T	.	.	GENE=PTEN;PROTEIN_CHANGE=K267Rfs*9;VARIANT_CLASS=Frame_Shift_Del;VARIANT_TYPE=DEL;CELL_LINE=MOLT4;SAMPLE_ID=MOLT4_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE;ENTREZ=5728;REFSEQ=NM_000314.4;PROTEIN_POS=265-267;SOURCE=cBioPortal CCLE ccle_broad_2019;ORIGINAL_BUILD=GRCh37;LIFTED;ANCHOR=reference
 17	7673704	TP53:R306*	G	A	.	.	GENE=TP53;PROTEIN_CHANGE=R306*;VARIANT_CLASS=Nonsense_Mutation;VARIANT_TYPE=SNP;CELL_LINE=MOLT4;SAMPLE_ID=MOLT4_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE;ENTREZ=7157;REFSEQ=NM_001126112.2;PROTEIN_POS=306;SOURCE=cBioPortal CCLE ccle_broad_2019;ORIGINAL_BUILD=GRCh37;LIFTED
 ```
 
