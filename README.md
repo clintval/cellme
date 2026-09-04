@@ -48,6 +48,7 @@ uv run cellme "MOLT-4" --build GRCh38 --reference /ref/hg38.fa --output MOLT-4.G
 The query is matched case-insensitively on the leading cell line token, so `MOLT-4`, `MOLT4`, and the full `MOLT4_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE` sample id all resolve to the same sample.
 Omit `--output` to stream the VCF to standard output.
 Pass `--build GRCh37` to emit the CCLE coordinates unchanged, with no liftover.
+When a query does not resolve to a cell line, cellme lists the closest CCLE names as suggestions and exits non-zero.
 
 The resulting VCF carries a full header and one record per mutation, including the classic MOLT-4 markers TP53 R306* (nonsense) and PTEN K267Rfs*9 (frameshift deletion):
 

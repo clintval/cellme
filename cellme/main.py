@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 import defopt
 
+from cellme.cbioportal import CellLineError
 from cellme.tools.truth_track import truth_track
 
 _tools: list[Callable[..., None]] = [
@@ -25,5 +26,9 @@ def run() -> None:
     logger = logging.getLogger("cellme")
     logger.info("Executing: " + " ".join(sys.argv))
     (command,) = _tools
-    defopt.run(command, argv=sys.argv[1:], version=True)
+    try:
+        defopt.run(command, argv=sys.argv[1:], version=True)
+    except CellLineError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        raise SystemExit(1) from error
     logger.info("Finished executing successfully.")

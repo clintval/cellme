@@ -6,8 +6,10 @@ from cellme.cbioportal import CellLineNotFoundError
 from cellme.cbioportal import cell_line_name
 from cellme.cbioportal import fetch_mutations
 from cellme.cbioportal import fetch_sample_ids
+from cellme.cbioportal import humanize_cell_line
 from cellme.cbioportal import normalize_cell_line
 from cellme.cbioportal import resolve_sample
+from cellme.cbioportal import suggest_cell_lines
 
 SAMPLES = [
     "MOLT4_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE",
@@ -103,3 +105,38 @@ def test_fetch_mutations_parses_and_cleans(monkeypatch: MonkeyPatch) -> None:
     assert mutations[0].variant_allele == "-"
     assert mutations[0].refseq_mrna_id == "NM_000314.4"
     assert mutations[1].refseq_mrna_id is None
+
+
+def test_humanize_cell_line_hyphenates_trailing_digits() -> None:
+    assert humanize_cell_line("MOLT4") == "MOLT-4"
+    assert humanize_cell_line("MOLT16") == "MOLT-16"
+    assert humanize_cell_line("JURKAT") == "JURKAT"
+
+
+def test_suggest_cell_lines_ranks_close_names() -> None:
+    assert suggest_cell_lines("JURKKAT", SAMPLES) == ["JURKAT"]
+
+
+def test_suggest_cell_lines_is_empty_below_cutoff() -> None:
+    assert suggest_cell_lines("ZQXWVPYK", SAMPLES) == []
+
+
+def test_resolve_typo_raises_with_suggestions() -> None:
+    with pytest.raises(CellLineNotFoundError) as excinfo:
+        resolve_sample("MOLT", SAMPLES)
+    message = str(excinfo.value)
+    assert "no CCLE cell line matched 'MOLT'" in message
+    assert "Did you mean:" in message
+    assert "MOLT-4" in message
+
+
+def test_resolve_nonsense_reports_no_close_matches() -> None:
+    with pytest.raises(CellLineNotFoundError) as excinfo:
+        resolve_sample("ZQXWVPYK", SAMPLES)
+    message = str(excinfo.value)
+    assert "No close matches." in message
+    assert "Did you mean" not in message
+
+
+def test_resolve_exact_query_is_unchanged() -> None:
+    assert resolve_sample("MOLT-4", SAMPLES) == "MOLT4_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE"

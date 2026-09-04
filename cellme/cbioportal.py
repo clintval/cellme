@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import requests
+from rapidfuzz import fuzz
+from rapidfuzz import process
 
 CBIOPORTAL_API: str = "https://www.cbioportal.org/api"
 """Base URL of the public cBioPortal REST API."""
@@ -18,6 +20,12 @@ _REQUEST_TIMEOUT: float = 60.0
 
 _MISSING_VALUES: frozenset[str] = frozenset({"", ".", "NA", "N/A", "NULL"})
 """String placeholders that cBioPortal uses to mean a value is absent."""
+
+_SUGGESTION_LIMIT: int = 5
+"""How many close cell-line names to offer when a query does not resolve."""
+
+_SUGGESTION_SCORE_CUTOFF: float = 70.0
+"""The minimum rapidfuzz similarity, out of 100, for a name to be suggested."""
 
 
 class CellLineError(ValueError):
@@ -108,6 +116,73 @@ def cell_line_name(sample_id: str) -> str:
     return sample_id.split("_", 1)[0]
 
 
+def humanize_cell_line(token: str) -> str:
+    """
+    Render a CCLE cell-line token in its conventional hyphenated form.
+
+    A token of a letter prefix followed by a trailing digit run is split with a
+    hyphen, so ``MOLT4`` becomes ``MOLT-4``. This is a light heuristic for
+    readability; tokens that do not fit that simple shape are returned unchanged.
+
+    Args:
+        token: The leading cell line token of a CCLE sample identifier.
+
+    Returns:
+        The token with a hyphen inserted before a trailing digit run when one
+        applies, otherwise the token unchanged.
+    """
+    match = re.fullmatch(r"([A-Za-z]+)(\d+)", token)
+    if match is None:
+        return token
+    return f"{match.group(1)}-{match.group(2)}"
+
+
+def suggest_cell_lines(
+    query: str,
+    sample_ids: Iterable[str],
+    *,
+    limit: int = _SUGGESTION_LIMIT,
+    score_cutoff: float = _SUGGESTION_SCORE_CUTOFF,
+) -> list[str]:
+    """
+    Return the closest CCLE cell-line names to a query by fuzzy similarity.
+
+    The query is compared against the unique leading cell-line token of every
+    sample, on their normalized alphanumeric form, using a Levenshtein-based
+    similarity. Only names scoring at or above the cutoff are kept, so a query
+    with no near neighbors yields an empty list.
+
+    Args:
+        query: The unresolved cell line identifier supplied by the user.
+        sample_ids: All sample identifiers available in the study.
+        limit: The maximum number of names to return.
+        score_cutoff: The minimum similarity, out of 100, to include a name.
+
+    Returns:
+        Up to ``limit`` human-friendly cell-line names, best match first.
+    """
+    display_names: list[str] = []
+    normalized_names: list[str] = []
+    seen: set[str] = set()
+    for sample_id in sample_ids:
+        token = cell_line_name(sample_id)
+        key = normalize_cell_line(token)
+        if key in seen:
+            continue
+        seen.add(key)
+        display_names.append(token)
+        normalized_names.append(key)
+
+    matches = process.extract(
+        normalize_cell_line(query),
+        normalized_names,
+        scorer=fuzz.ratio,
+        limit=limit,
+        score_cutoff=score_cutoff,
+    )
+    return [humanize_cell_line(display_names[index]) for _name, _score, index in matches]
+
+
 def resolve_sample(query: str, sample_ids: Iterable[str]) -> str:
     """
     Resolve a cell line query to a single CCLE sample identifier.
@@ -138,7 +213,12 @@ def resolve_sample(query: str, sample_ids: Iterable[str]) -> str:
     if len(by_token) == 1:
         return by_token[0]
     if not by_token:
-        raise CellLineNotFoundError(f"No cell line matching {query!r} was found in the study.")
+        suggestions = suggest_cell_lines(query, identifiers)
+        if suggestions:
+            hint = "Did you mean: " + ", ".join(suggestions) + "?"
+        else:
+            hint = "No close matches."
+        raise CellLineNotFoundError(f"no CCLE cell line matched {query!r}. {hint}")
     raise AmbiguousCellLineError(
         f"Query {query!r} matched multiple cell lines: {', '.join(sorted(by_token))}."
     )

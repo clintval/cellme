@@ -15,6 +15,7 @@ dependencies    = [
     "defopt~=6.4",
     "liftover>=1.3",
     "pysam>=0.23",
+    "rapidfuzz>=3.14.5",
     "requests>=2.32",
 ]
 classifiers     = [
