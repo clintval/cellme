@@ -140,3 +140,13 @@ def test_resolve_nonsense_reports_no_close_matches() -> None:
 
 def test_resolve_exact_query_is_unchanged() -> None:
     assert resolve_sample("MOLT-4", SAMPLES) == "MOLT4_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE"
+
+
+def test_fetch_mutations_maps_numeric_sex_chromosomes(monkeypatch: MonkeyPatch) -> None:
+    def fake_post(_url: str, **_kwargs: object) -> _FakeResponse:
+        return _FakeResponse([{**PTEN_RECORD, "chr": "23"}, {**PTEN_RECORD, "chr": "24"}])
+
+    monkeypatch.setattr("cellme.cbioportal.requests.post", fake_post)
+    mutations = fetch_mutations("ccle_broad_2019", "SAMPLE")
+    assert mutations[0].chromosome == "X"
+    assert mutations[1].chromosome == "Y"

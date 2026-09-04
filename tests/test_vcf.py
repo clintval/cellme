@@ -163,6 +163,18 @@ def test_build_records_sorts_and_counts_drops() -> None:
     assert [record.contig for record in records] == ["1", "17"]
 
 
+def test_build_records_drops_unknown_contigs() -> None:
+    mutations = [
+        make_mutation(chromosome="17"),
+        make_mutation(chromosome="GL000209"),
+    ]
+    records, dropped = build_records(
+        mutations, SAME_BUILD_CONTEXT, lift_position=None, anchor_base=None
+    )
+    assert dropped == 1
+    assert [record.contig for record in records] == ["17"]
+
+
 def test_header_declares_reference_contigs_and_full_info_schema() -> None:
     header_text = str(build_header(CONTEXT, "0.1.0"))
     assert "##reference=GRCh38" in header_text

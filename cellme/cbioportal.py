@@ -27,6 +27,9 @@ _SUGGESTION_LIMIT: int = 5
 _SUGGESTION_SCORE_CUTOFF: float = 70.0
 """The minimum rapidfuzz similarity, out of 100, for a name to be suggested."""
 
+_CHROMOSOME_ALIASES: dict[str, str] = {"23": "X", "24": "Y", "25": "MT", "M": "MT"}
+"""CCLE numeric chromosome codes mapped to their standard contig names."""
+
 
 class CellLineError(ValueError):
     """Base class for failures to resolve a cell line query to a sample."""
@@ -224,6 +227,22 @@ def resolve_sample(query: str, sample_ids: Iterable[str]) -> str:
     )
 
 
+def _normalize_chromosome(chromosome: str) -> str:
+    """
+    Map a CCLE chromosome code to its standard contig name.
+
+    CCLE reports the sex and mitochondrial chromosomes with numeric codes, where
+    23 is X, 24 is Y, and 25 is the mitochondrion.
+
+    Args:
+        chromosome: The raw ``chr`` value from a cBioPortal record.
+
+    Returns:
+        The standard contig name, unchanged when no alias applies.
+    """
+    return _CHROMOSOME_ALIASES.get(chromosome, chromosome)
+
+
 def _mutation_from_record(record: dict[str, Any]) -> Mutation:
     """
     Build a Mutation from one cBioPortal mutation record.
@@ -242,7 +261,7 @@ def _mutation_from_record(record: dict[str, Any]) -> Mutation:
     return Mutation(
         gene=symbol,
         entrez_gene_id=int(entrez) if entrez is not None else None,
-        chromosome=str(record["chr"]),
+        chromosome=_normalize_chromosome(str(record["chr"])),
         start_position=int(record["startPosition"]),
         end_position=int(record["endPosition"]),
         reference_allele=str(record.get("referenceAllele") or ""),

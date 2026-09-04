@@ -299,21 +299,21 @@ def build_records(
 
     Returns:
         A tuple of the sorted records and the count of mutations that were
-        dropped because they were malformed or could not be lifted.
+        dropped because they were malformed, could not be lifted, or sit on a
+        contig that is not part of the target build.
     """
+    order = contig_order(context.target_build)
     records: list[VcfRecord] = []
     dropped = 0
     for mutation in mutations:
         record = build_record(
             mutation, context, lift_position=lift_position, anchor_base=anchor_base
         )
-        if record is None:
+        if record is None or record.contig not in order:
             dropped += 1
             continue
         records.append(record)
-    order = contig_order(context.target_build)
-    unplaced = len(order)
-    records.sort(key=lambda record: (order.get(record.contig, unplaced), record.position))
+    records.sort(key=lambda record: (order[record.contig], record.position))
     return records, dropped
 
 
