@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 import defopt
 
+from cellme.builds import GenomeBuild
 from cellme.cbioportal import CellLineError
 from cellme.tools.truth_track import truth_track
 
@@ -27,7 +28,9 @@ def run() -> None:
     logger.info("Executing: " + " ".join(sys.argv))
     (command,) = _tools
     try:
-        defopt.run(command, argv=sys.argv[1:], version=True)
+        # Parse --build through GenomeBuild so its hidden GRCh aliases are accepted
+        # while the help text still advertises only the canonical hg38 / hg19 keys.
+        defopt.run(command, argv=sys.argv[1:], version=True, parsers={GenomeBuild: GenomeBuild})
     except CellLineError as error:
         print(f"Error: {error}", file=sys.stderr)
         raise SystemExit(1) from error

@@ -7,27 +7,34 @@ class GenomeBuild(StrEnum):
     """
     A human reference genome build supported by cellme.
 
-    Only the two builds relevant to CCLE truth tracks are modeled: GRCh37, the
-    build that CCLE reports its coordinates against, and GRCh38, the current
-    human reference. The ``hg19`` and ``hg38`` aliases resolve to GRCh37 and
-    GRCh38 respectively when the enum is constructed from a string.
+    Only the two builds relevant to CCLE truth tracks are modeled. They are named
+    by their common UCSC labels, ``hg38`` (the current human reference) and
+    ``hg19`` (the build CCLE reports its coordinates against), which are the
+    values accepted at the command line. The Ensembl-style names ``GRCh38`` and
+    ``GRCh37`` are accepted as case-insensitive aliases when the enum is
+    constructed from a string, but are not advertised as command-line choices.
     """
 
-    GRCh38 = "GRCh38"
-    GRCh37 = "GRCh37"
+    hg38 = "hg38"
+    hg19 = "hg19"
 
     @classmethod
     def _missing_(cls, value: object) -> "GenomeBuild | None":
         """
-        Resolve the ``hg19`` and ``hg38`` aliases case-insensitively.
+        Resolve build names case-insensitively, including the GRCh aliases.
 
         Args:
-            value: The value that did not match a canonical member name.
+            value: The value that did not match a canonical member value.
 
         Returns:
-            The matching build for a known alias, otherwise None.
+            The matching build for a known name or alias, otherwise None.
         """
-        aliases = {"hg38": cls.GRCh38, "hg19": cls.GRCh37}
+        aliases = {
+            "hg38": cls.hg38,
+            "hg19": cls.hg19,
+            "grch38": cls.hg38,
+            "grch37": cls.hg19,
+        }
         if isinstance(value, str):
             return aliases.get(value.lower())
         return None
@@ -35,7 +42,12 @@ class GenomeBuild(StrEnum):
     @property
     def ucsc_name(self) -> str:
         """The UCSC-style assembly name used by liftover chain files."""
-        return {GenomeBuild.GRCh38: "hg38", GenomeBuild.GRCh37: "hg19"}[self]
+        return {GenomeBuild.hg38: "hg38", GenomeBuild.hg19: "hg19"}[self]
+
+    @property
+    def grch_name(self) -> str:
+        """The Ensembl/GRCh assembly name, used to label the emitted VCF."""
+        return {GenomeBuild.hg38: "GRCh38", GenomeBuild.hg19: "GRCh37"}[self]
 
 
 GRCH37_CONTIGS: tuple[tuple[str, int], ...] = (
@@ -97,8 +109,8 @@ GRCH38_CONTIGS: tuple[tuple[str, int], ...] = (
 """Primary-assembly contig names and lengths for GRCh38 (Ensembl naming)."""
 
 _CONTIGS_BY_BUILD: dict[GenomeBuild, tuple[tuple[str, int], ...]] = {
-    GenomeBuild.GRCh37: GRCH37_CONTIGS,
-    GenomeBuild.GRCh38: GRCH38_CONTIGS,
+    GenomeBuild.hg19: GRCH37_CONTIGS,
+    GenomeBuild.hg38: GRCH38_CONTIGS,
 }
 
 

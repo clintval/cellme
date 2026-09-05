@@ -21,14 +21,14 @@ from cellme.vcf import write_vcf
 
 logger = logging.getLogger("cellme")
 
-CCLE_BUILD: GenomeBuild = GenomeBuild.GRCh37
-"""CCLE reports its coordinates against GRCh37, the source build for lifting."""
+CCLE_BUILD: GenomeBuild = GenomeBuild.hg19
+"""CCLE reports its coordinates against GRCh37 (hg19), the source build for lifting."""
 
 
 def truth_track(
     query: str,
     *,
-    build: GenomeBuild = GenomeBuild.GRCh38,
+    build: GenomeBuild = GenomeBuild.hg38,
     reference: Path | None = None,
     output: Path | None = None,
     study: str = DEFAULT_STUDY,
@@ -38,12 +38,15 @@ def truth_track(
 
     The query is resolved to a Cancer Cell Line Encyclopedia sample, its somatic
     mutations are fetched from cBioPortal, and each is written as a VCF record on
-    the requested genome build. CCLE coordinates are GRCh37; when the target
-    build is GRCh38 every coordinate is lifted with a UCSC chain file.
+    the requested genome build. CCLE coordinates are hg19 (GRCh37); when the
+    target build is hg38 (GRCh38) every coordinate is lifted with a UCSC chain
+    file. When the output path ends in ``.gz`` the VCF is BGZF compressed and a
+    tabix ``.tbi`` index is written alongside it.
 
     Args:
         query: Cell line identifier, e.g. MOLT-4, MOLT4, or a full CCLE sample id.
-        build: Target genome build for the emitted VCF.
+        build: Target genome build for the emitted VCF: hg38 or hg19 (the aliases
+            GRCh38 and GRCh37 are also accepted).
         reference: Reference FASTA for the target build, used only to place
             spec-compliant anchor bases on insertions and deletions. Without it,
             indel anchors use a placeholder N and are marked ANCHOR=placeholder.
