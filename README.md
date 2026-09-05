@@ -14,7 +14,7 @@ Convert a human cell line identifier into a truth-track VCF of its known mutatio
 
 cellme builds a truth/known VCF for a cell line by resolving a name such as `MOLT-4` to a [Cancer Cell Line Encyclopedia](https://sites.broadinstitute.org/ccle/) sample, fetching that sample's somatic mutations from the [cBioPortal](https://www.cbioportal.org/) REST API, and writing them as a sorted VCF.
 The mutation source is the `ccle_broad_2019` study.
-Records are against the GRCh37 assembly but a liftover can be performed if you need GRCh38 output.
+CCLE reports its coordinates against hg19 (GRCh37); by default cellme lifts them to hg38 (GRCh38), and `--build hg19` keeps the native coordinates.
 
 ## Installation
 
@@ -26,16 +26,19 @@ pip install cellme
 
 ## Usage
 
-Write a GRCh38 truth track for the cell line MOLT-4 to a file:
+Write an hg38 truth track for the cell line MOLT-4 to a file:
 
 ```console
-cellme "MOLT-4" --build GRCh38 --reference /ref/hg38.fa --output MOLT-4.GRCh38.vcf
+cellme "MOLT-4" --build hg38 --reference /ref/hg38.fa --output MOLT-4.hg38.vcf.gz
 ```
 
 > [!IMPORTANT]
 > Always pass `--reference` with a FASTA for the build you target, as shown above.
-> It ensure the correct anchor bases are set for insertions and deletions.
+> It ensures the correct anchor bases are set for insertions and deletions.
 > Without it, indel anchor bases fall back to a placeholder `N` and those records are marked `ANCHOR=placeholder`.
+
+The build keys are `hg38` and `hg19` (the Ensembl names `GRCh38` and `GRCh37` are accepted as aliases).
+When the `--output` path ends in `.gz` the VCF is written block-gzip (BGZF) compressed with a tabix `.tbi` index alongside it, ready to use as a random-access truth track.
 
 The query is matched case-insensitively on the leading cell line token, so `MOLT-4`, `MOLT4`, and the full `MOLT4_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE` sample ID all resolve to the same sample.
 
