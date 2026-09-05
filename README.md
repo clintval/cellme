@@ -1,6 +1,6 @@
 # cellme
 
-[![PyPI version](https://img.shields.io/pypi/v/cellme.svg)](https://pypi.org/project/cellme/)
+[![PyPI version](https://img.shields.io/pypi/v/cellme)](https://pypi.org/project/cellme/)
 [![CI](https://github.com/clintval/cellme/actions/workflows/python_package.yml/badge.svg?branch=main)](https://github.com/clintval/cellme/actions/workflows/python_package.yml?query=branch%3Amain)
 [![Python Versions](https://img.shields.io/badge/python-3.12_|_3.13_|_3.14-blue)](https://github.com/clintval/cellme)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
