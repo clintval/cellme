@@ -1,5 +1,6 @@
 # cellme
 
+[![PyPI version](https://img.shields.io/pypi/v/cellme.svg)](https://pypi.org/project/cellme/)
 [![CI](https://github.com/clintval/cellme/actions/workflows/python_package.yml/badge.svg?branch=main)](https://github.com/clintval/cellme/actions/workflows/python_package.yml?query=branch%3Amain)
 [![Python Versions](https://img.shields.io/badge/python-3.12_|_3.13_|_3.14-blue)](https://github.com/clintval/cellme)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -15,7 +16,22 @@ cellme builds a truth/known VCF for a cell line by resolving a name such as `MOL
 The mutation source is the `ccle_broad_2019` study.
 Records are against the GRCh37 assembly but a liftover can be performed if you need GRCh38 output.
 
-## Recommended Installation
+## Installation
+
+Install the release from PyPI with `pip`:
+
+```console
+pip install cellme
+```
+
+Add cellme to a [`uv`](https://docs.astral.sh/uv/) project, or run it without installing, with:
+
+```console
+uv add cellme
+uvx cellme --help
+```
+
+## Development Installation
 
 Install the Python package and dependency management tool [`uv`](https://docs.astral.sh/uv/getting-started/installation/) using the official documentation.
 
