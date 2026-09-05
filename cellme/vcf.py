@@ -212,7 +212,7 @@ def _build_info(
     if protein_position is not None:
         info["PROTEIN_POS"] = protein_position
     info["SOURCE"] = f"cBioPortal CCLE {context.study}"
-    info["ORIGINAL_BUILD"] = str(context.source_build)
+    info["ORIGINAL_BUILD"] = context.source_build.grch_name
     if lifted:
         info["ORIGINAL_LOCUS"] = _original_locus(mutation)
         info["LIFTED"] = True
@@ -356,11 +356,11 @@ def build_header(context: TrackContext, version: str) -> "pysam.VariantHeader":
     """
     header = pysam.VariantHeader()
     header.add_line(f"##source=cellme {version}")
-    header.add_line(f"##reference={context.target_build}")
+    header.add_line(f"##reference={context.target_build.grch_name}")
     header.add_line(f"##cellme_cellLine={context.cell_line}")
     header.add_line(f"##cellme_sampleId={context.sample_id}")
     header.add_line(f"##cellme_sourceStudy=cBioPortal CCLE {context.study}")
-    header.add_line(f"##cellme_sourceBuild={context.source_build}")
+    header.add_line(f"##cellme_sourceBuild={context.source_build.grch_name}")
     for name, length in contigs_for(context.target_build):
         header.add_line(f"##contig=<ID={name},length={length}>")
     for field in INFO_FIELDS:
@@ -402,13 +402,44 @@ def write_vcf(
     """
     Write records to a VCF at a path, or to standard output when no path given.
 
+    When the output path ends in ``.gz`` the VCF is block-gzip (BGZF) compressed
+    and a tabix ``.tbi`` index is written alongside it, so the result can be used
+    directly as a random-access truth track. A plain path is written uncompressed
+    and unindexed, as is standard output.
+
     Args:
         records: The records to write, already in sorted order.
         header: The header to write them under.
         output: The destination path, or None to write to standard output.
     """
-    destination = str(output) if output is not None else "-"
-    with pysam.VariantFile(destination, "w", header=header) as out:
+    if output is None:
+        _write_records("-", header, records, compressed=False)
+        return
+    destination = str(output)
+    compressed = destination.endswith(".gz")
+    _write_records(destination, header, records, compressed=compressed)
+    if compressed:
+        pysam.tabix_index(destination, preset="vcf", force=True)
+
+
+def _write_records(
+    destination: str,
+    header: "pysam.VariantHeader",
+    records: Iterable[VcfRecord],
+    *,
+    compressed: bool,
+) -> None:
+    """
+    Write records to a destination, BGZF-compressed when ``compressed`` is set.
+
+    Args:
+        destination: The pysam destination, a path or ``-`` for standard output.
+        header: The header to write the records under.
+        records: The records to write, already in sorted order.
+        compressed: Whether to write a block-gzip compressed VCF.
+    """
+    mode = "wz" if compressed else "w"
+    with pysam.VariantFile(destination, mode, header=header) as out:
         for record in records:
             out.write(_to_pysam_record(header, record))
 

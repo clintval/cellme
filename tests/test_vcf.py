@@ -1,27 +1,32 @@
+from pathlib import Path
 from typing import Any
+
+import pysam
 
 from cellme.builds import GenomeBuild
 from cellme.cbioportal import Mutation
 from cellme.vcf import INFO_FIELDS
 from cellme.vcf import TrackContext
+from cellme.vcf import VcfRecord
 from cellme.vcf import build_header
 from cellme.vcf import build_record
 from cellme.vcf import build_records
+from cellme.vcf import write_vcf
 
 CONTEXT = TrackContext(
     cell_line="MOLT4",
     sample_id="MOLT4_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE",
     study="ccle_broad_2019",
-    source_build=GenomeBuild.GRCh37,
-    target_build=GenomeBuild.GRCh38,
+    source_build=GenomeBuild.hg19,
+    target_build=GenomeBuild.hg38,
 )
 
 SAME_BUILD_CONTEXT = TrackContext(
     cell_line="MOLT4",
     sample_id="MOLT4_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE",
     study="ccle_broad_2019",
-    source_build=GenomeBuild.GRCh37,
-    target_build=GenomeBuild.GRCh37,
+    source_build=GenomeBuild.hg19,
+    target_build=GenomeBuild.hg19,
 )
 
 
@@ -208,3 +213,35 @@ def test_header_declares_reference_contigs_and_full_info_schema() -> None:
     assert "##contig=<ID=17,length=83257441>" in header_text
     for field in INFO_FIELDS:
         assert f"##INFO=<ID={field.key}," in header_text
+
+
+def _one_record_and_header() -> tuple[list[VcfRecord], "pysam.VariantHeader"]:
+    records, _dropped = build_records(
+        [make_mutation()], SAME_BUILD_CONTEXT, lift_position=None, anchor_base=None
+    )
+    return records, build_header(SAME_BUILD_CONTEXT, "0.1.0")
+
+
+def test_write_vcf_plain_path_is_uncompressed_and_unindexed(tmp_path: Path) -> None:
+    records, header = _one_record_and_header()
+    output = tmp_path / "molt4.vcf"
+
+    write_vcf(records, header, output)
+
+    assert output.read_bytes()[:2] != b"\x1f\x8b"  # not gzip-compressed
+    assert not (tmp_path / "molt4.vcf.tbi").exists()
+    with pysam.VariantFile(str(output)) as vcf:
+        assert [record.info["GENE"] for record in vcf] == ["TP53"]
+
+
+def test_write_vcf_gz_path_is_bgzipped_and_tabix_indexed(tmp_path: Path) -> None:
+    records, header = _one_record_and_header()
+    output = tmp_path / "molt4.vcf.gz"
+
+    write_vcf(records, header, output)
+
+    # BGZF is gzip with the extra-field flag (FLG.FEXTRA) set: magic 1f 8b 08 04.
+    assert output.read_bytes()[:4] == b"\x1f\x8b\x08\x04"
+    assert (tmp_path / "molt4.vcf.gz.tbi").exists()
+    with pysam.VariantFile(str(output)) as vcf:
+        assert [record.info["GENE"] for record in vcf] == ["TP53"]
