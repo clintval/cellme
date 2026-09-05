@@ -24,35 +24,12 @@ Install the release from PyPI with `pip`:
 pip install cellme
 ```
 
-Add cellme to a [`uv`](https://docs.astral.sh/uv/) project, or run it without installing, with:
-
-```console
-uv add cellme
-uvx cellme --help
-```
-
-## Development Installation
-
-Install the Python package and dependency management tool [`uv`](https://docs.astral.sh/uv/getting-started/installation/) using the official documentation.
-
-Install the dependencies of the project with:
-
-```console
-uv sync --locked
-```
-
-To check successful installation, run:
-
-```console
-uv run cellme --help
-```
-
 ## Usage
 
 Write a GRCh38 truth track for the cell line MOLT-4 to a file:
 
 ```console
-uv run cellme "MOLT-4" --build GRCh38 --reference /ref/hg38.fa --output MOLT-4.GRCh38.vcf
+cellme "MOLT-4" --build GRCh38 --reference /ref/hg38.fa --output MOLT-4.GRCh38.vcf
 ```
 
 > [!IMPORTANT]

@@ -1,5 +1,21 @@
 # Development and Testing
 
+## Development Installation
+
+Install the Python package and dependency management tool [`uv`](https://docs.astral.sh/uv/getting-started/installation/) using the official documentation.
+
+Install the dependencies of the project with:
+
+```console
+uv sync --locked
+```
+
+To check successful installation, run:
+
+```console
+uv run cellme --help
+```
+
 ## Primary Development Commands
 
 To check and resolve linting issues in the codebase, run:
