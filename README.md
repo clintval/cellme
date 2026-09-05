@@ -38,7 +38,6 @@ cellme "MOLT-4" --build hg38 --reference /ref/hg38.fa --output MOLT-4.hg38.vcf.g
 > Without it, indel anchor bases fall back to a placeholder `N` and those records are marked `ANCHOR=placeholder`.
 
 The build keys are `hg38` and `hg19` (the Ensembl names `GRCh38` and `GRCh37` are accepted as aliases).
-When the `--output` path ends in `.gz` the VCF is written block-gzip (BGZF) compressed with a tabix `.tbi` index alongside it, ready to use as a random-access truth track.
 
 The query is matched case-insensitively on the leading cell line token, so `MOLT-4`, `MOLT4`, and the full `MOLT4_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE` sample ID all resolve to the same sample.
 
