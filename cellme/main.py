@@ -7,6 +7,7 @@ import defopt
 from cellme.builds import GenomeBuild
 from cellme.cbioportal import CellLineError
 from cellme.tools.truth_track import truth_track
+from cellme.vcf import TruthTrackError
 
 _tools: list[Callable[..., None]] = [
     truth_track,
@@ -33,5 +34,13 @@ def run() -> None:
         defopt.run(command, argv=sys.argv[1:], version=True, parsers={GenomeBuild: GenomeBuild})
     except CellLineError as error:
         print(f"Error: {error}", file=sys.stderr)
+        raise SystemExit(1) from error
+    except TruthTrackError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        if error.opt_out_flag:
+            print(
+                f"Pass {error.opt_out_flag} to drop such variants with a warning instead.",
+                file=sys.stderr,
+            )
         raise SystemExit(1) from error
     logger.info("Finished executing successfully.")
