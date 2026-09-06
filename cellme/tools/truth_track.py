@@ -33,7 +33,7 @@ def truth_track(
     reference: Path | None = None,
     output: Path | None = None,
     study: str = DEFAULT_STUDY,
-    skip_liftover_fails: bool = False,
+    raise_on_liftover_fails: bool = False,
     skip_ref_mismatch: bool = False,
 ) -> None:
     """
@@ -43,14 +43,18 @@ def truth_track(
     mutations are fetched from cBioPortal, and each is written as a VCF record on
     the requested genome build. CCLE coordinates are hg19 (GRCh37); when the
     target build is hg38 (GRCh38) every coordinate is lifted with a UCSC chain
-    file. When the output path ends in ``.gz`` the VCF is BGZF compressed and a
-    tabix ``.tbi`` index is written alongside it.
+    file, reverse-complementing the alleles of any variant that maps to a
+    minus-strand chain block. When the output path ends in ``.gz`` the VCF is BGZF
+    compressed and a tabix ``.tbi`` index is written alongside it.
 
-    cellme is strict by default so a truth track is never silently partial or
-    inconsistent. A coordinate that cannot be lifted to the target build aborts
-    the run, and when ``reference`` is supplied every emitted record's REF allele
-    is checked against the reference sequence and a mismatch aborts the run. Each
-    check has an opt-out that drops the offending variant with a warning instead.
+    Liftover failures are lenient by default: a coordinate that cannot be lifted
+    to the target build is dropped with a warning, so the truth track still builds
+    from the coordinates that do lift. Pass ``--raise-on-liftover-fails`` to abort
+    the run on the first coordinate that fails to lift instead. Reference
+    validation is strict by default: when ``reference`` is supplied, every emitted
+    record's REF allele is checked against the reference sequence and a mismatch
+    aborts the run, since a mismatch signals a miscalled record. Pass
+    ``--skip-ref-mismatch`` to drop such records with a warning instead.
 
     Args:
         query: Cell line identifier, e.g. MOLT-4, MOLT4, or a full CCLE sample id.
@@ -63,8 +67,8 @@ def truth_track(
             marked ANCHOR=placeholder and no REF validation is performed.
         output: Output VCF path. Writes to standard output when omitted.
         study: cBioPortal study identifier to query.
-        skip_liftover_fails: Drop and warn on a variant that cannot be lifted to
-            the target build instead of aborting the run.
+        raise_on_liftover_fails: Abort the run on a variant that cannot be lifted
+            to the target build instead of dropping it with a warning.
         skip_ref_mismatch: Drop and warn on a record whose REF allele does not
             match the reference instead of aborting the run. Has no effect unless
             ``reference`` is supplied.
@@ -93,7 +97,7 @@ def truth_track(
         lift_position=lift_position,
         anchor_base=anchor_base,
         reference_lookup=reference_lookup,
-        skip_liftover_fails=skip_liftover_fails,
+        raise_on_liftover_fails=raise_on_liftover_fails,
         skip_ref_mismatch=skip_ref_mismatch,
     )
     if dropped:

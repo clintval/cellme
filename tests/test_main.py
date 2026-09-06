@@ -75,15 +75,15 @@ def test_cli_version_flag_prints_version_and_exits(
     assert capsys.readouterr().out.strip() == __version__
 
 
-def test_cli_help_lists_the_strict_validation_flags(
+def test_cli_help_lists_the_validation_flags(
     monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
 ) -> None:
-    """`cellme --help` should advertise both default-strict opt-out flags."""
+    """`cellme --help` should advertise the liftover and reference validation flags."""
     monkeypatch.setattr("sys.argv", ["cellme", "--help"])
     with pytest.raises(SystemExit):
         main.run()
     help_text = capsys.readouterr().out
-    assert "--skip-liftover-fails" in help_text
+    assert "--raise-on-liftover-fails" in help_text
     assert "--skip-ref-mismatch" in help_text
 
 

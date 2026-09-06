@@ -17,11 +17,93 @@ from cellme.cbioportal import Mutation
 
 logger = logging.getLogger("cellme")
 
-LiftPosition = Callable[[str, int], int | None]
-"""A callable mapping a source (contig, 1-based position) to a lifted position."""
+
+@dataclass(frozen=True)
+class LiftedCoordinate:
+    """A coordinate lifted to the target build, with the strand of its chain block."""
+
+    position: int
+    """The 1-based position on the target build."""
+
+    negative_strand: bool
+    """True when the source maps to the minus strand, so alleles must be reoriented."""
+
+
+LiftPosition = Callable[[str, int], LiftedCoordinate | None]
+"""A callable mapping a source (contig, 1-based position) to a lifted coordinate."""
 
 AnchorBase = Callable[[str, int], str]
 """A callable returning the single reference base at a (contig, 1-based position)."""
+
+_COMPLEMENTS: dict[str, str] = {
+    "A": "T",
+    "C": "G",
+    "G": "C",
+    "T": "A",
+    "U": "A",
+    "M": "K",
+    "K": "M",
+    "R": "Y",
+    "Y": "R",
+    "W": "W",
+    "S": "S",
+    "B": "V",
+    "V": "B",
+    "H": "D",
+    "D": "H",
+    "N": "N",
+    "a": "t",
+    "c": "g",
+    "g": "c",
+    "t": "a",
+    "u": "a",
+    "m": "k",
+    "k": "m",
+    "r": "y",
+    "y": "r",
+    "w": "w",
+    "s": "s",
+    "b": "v",
+    "v": "b",
+    "h": "d",
+    "d": "h",
+    "n": "n",
+}
+"""Complement of every IUPAC nucleotide code, in both cases, including the N placeholder."""
+
+_INVALID_BASES: str = "".join(c for c in (chr(o) for o in range(256)) if c not in _COMPLEMENTS)
+"""Every byte that is not an IUPAC nucleotide code, dropped during complementing."""
+
+_COMPLEMENTS_TABLE: dict[int, int | None] = str.maketrans(
+    "".join(_COMPLEMENTS.keys()), "".join(_COMPLEMENTS.values()), _INVALID_BASES
+)
+"""Translation table mapping each base to its complement for fast reverse-complementing."""
+
+
+def _reverse_complement(bases: str) -> str:
+    """
+    Return the reverse complement of a DNA sequence over the IUPAC alphabet.
+
+    Alleles lifted across a minus-strand chain block are read on the opposite
+    strand, so both their order and their bases must be flipped to sit on the
+    target build's forward strand. Degenerate IUPAC codes are complemented too.
+
+    Args:
+        bases: A DNA sequence over the IUPAC nucleotide codes.
+
+    Returns:
+        The reverse complement of the sequence.
+
+    Raises:
+        KeyError: When the sequence contains a character that is not an IUPAC
+            nucleotide code, which would otherwise be silently dropped.
+    """
+    reverse_complemented = bases.translate(_COMPLEMENTS_TABLE)[::-1]
+    if len(reverse_complemented) != len(bases):
+        bad_bases = "".join({base for base in bases if base not in _COMPLEMENTS})
+        raise KeyError(f"Invalid bases found: {bad_bases}")
+    return reverse_complemented
+
 
 ReferenceLookup = Callable[[str, int, int], str]
 """A callable returning the reference bases over a 1-based, inclusive ``[start, end]`` span."""
@@ -37,9 +119,10 @@ class TruthTrackError(Exception):
     """
     Base class for failures raised while building truth-track VCF records.
 
-    Each subclass records the command-line flag that downgrades the failure from
+    A subclass may record the command-line flag that downgrades the failure from
     a raised error to a dropped-and-warned record, so the command line can point
-    the user at the matching opt-out.
+    the user at the matching opt-out. It is left empty when dropping is already
+    the default and no such opt-out flag exists.
     """
 
     opt_out_flag: ClassVar[str] = ""
@@ -47,9 +130,13 @@ class TruthTrackError(Exception):
 
 
 class LiftoverError(TruthTrackError):
-    """Raised when a mutation's coordinate cannot be lifted to the target build."""
+    """
+    Raised when a mutation's coordinate cannot be lifted to the target build.
 
-    opt_out_flag: ClassVar[str] = "--skip-liftover-fails"
+    Liftover failures are lenient by default and only surface as a raised error
+    when the run opts into strict liftover with ``--raise-on-liftover-fails``, so
+    there is no opt-out flag to advertise.
+    """
 
 
 class ReferenceMismatchError(TruthTrackError):
@@ -271,6 +358,92 @@ def _build_info(
     return info
 
 
+def _lift(
+    lift_position: LiftPosition | None,
+    mutation: Mutation,
+    context: TrackContext,
+    position: int,
+) -> LiftedCoordinate:
+    """
+    Lift one source position to the target build, or raise :class:`LiftoverError`.
+
+    Args:
+        lift_position: The lifter, or None when the source and target builds match.
+        mutation: The source mutation, used only to describe a failure.
+        context: The shared per-run context, used to name the builds in a failure.
+        position: The 1-based source position to lift.
+
+    Returns:
+        The lifted coordinate. When no lifter is supplied the position passes
+        through unchanged on the forward strand.
+
+    Raises:
+        LiftoverError: When the position cannot be mapped to the target build.
+    """
+    if lift_position is None:
+        return LiftedCoordinate(position=position, negative_strand=False)
+    lifted = lift_position(mutation.chromosome, position)
+    if lifted is None:
+        raise LiftoverError(
+            f"Could not lift {_describe(mutation)} at {_original_locus(mutation)} "
+            f"from {context.source_build.grch_name} to {context.target_build.grch_name}."
+        )
+    return lifted
+
+
+def _resolve_anchor(
+    anchor_base: AnchorBase | None, chromosome: str, position: int
+) -> tuple[str, str]:
+    """
+    Resolve the indel anchor base and its provenance at a target position.
+
+    Args:
+        anchor_base: A callable returning the target reference base, or None.
+        chromosome: The contig of the anchor position.
+        position: The 1-based anchor position on the target build.
+
+    Returns:
+        A tuple of the anchor base and its provenance, ``reference`` when read
+        from the target FASTA or ``placeholder`` when it falls back to ``N``.
+    """
+    if anchor_base is None:
+        return "N", "placeholder"
+    return anchor_base(chromosome, position), "reference"
+
+
+def _lift_span(
+    lift_position: LiftPosition | None,
+    mutation: Mutation,
+    context: TrackContext,
+) -> tuple[int, int, bool]:
+    """
+    Lift both ends of a variant's source span onto the target build.
+
+    Args:
+        lift_position: The lifter, or None when the source and target builds match.
+        mutation: The source mutation whose start and end positions are lifted.
+        context: The shared per-run context, used to name the builds in a failure.
+
+    Returns:
+        A tuple of the lower and upper 1-based target positions and whether the
+        span sits on the minus strand.
+
+    Raises:
+        LiftoverError: When either end fails to lift or the two ends disagree on
+            strand, which means the span straddles a chain break.
+    """
+    start = _lift(lift_position, mutation, context, mutation.start_position)
+    end = _lift(lift_position, mutation, context, mutation.end_position)
+    if start.negative_strand != end.negative_strand:
+        raise LiftoverError(
+            f"Could not lift {_describe(mutation)} at {_original_locus(mutation)} "
+            f"from {context.source_build.grch_name} to {context.target_build.grch_name}: "
+            f"the variant straddles a strand boundary between builds."
+        )
+    low, high = sorted((start.position, end.position))
+    return low, high, start.negative_strand
+
+
 def build_record(
     mutation: Mutation,
     context: TrackContext,
@@ -281,11 +454,13 @@ def build_record(
     """
     Convert one CCLE mutation into a VCF record on the target build.
 
-    Substitutions carry their CCLE alleles through unchanged. Insertions and
-    deletions are left-anchored: a deletion sits one base to the left of the
-    deleted sequence and an insertion at the base preceding the insertion point.
-    The anchoring position is computed in the source build, then lifted, so the
-    anchor base is read from the target reference when one is supplied.
+    Coordinates are lifted with strand awareness: a source that maps to a
+    minus-strand chain block is placed at the lifted position of its left-most
+    base on the target build, and its alleles are reverse-complemented so the
+    emitted REF sits on the target build's forward strand. Insertions and
+    deletions are left-anchored, so a deletion carries the reference base to the
+    left of the deleted sequence and an insertion the base preceding the insertion
+    point; the anchor base is read from the target reference when one is supplied.
 
     Args:
         mutation: The source mutation to convert.
@@ -307,43 +482,36 @@ def build_record(
     if is_deletion and is_insertion:
         return None
 
-    if is_deletion:
-        source_position = mutation.start_position - 1
-        if source_position < 1:
-            return None
-    else:
-        source_position = mutation.start_position
-
-    if lift_position is None:
-        position = source_position
-    else:
-        lifted_position = lift_position(mutation.chromosome, source_position)
-        if lifted_position is None:
-            raise LiftoverError(
-                f"Could not lift {_describe(mutation)} at {_original_locus(mutation)} "
-                f"from {context.source_build.grch_name} to {context.target_build.grch_name}."
-            )
-        position = lifted_position
+    reference_allele = mutation.reference_allele.upper()
+    variant_allele = mutation.variant_allele.upper()
 
     anchor_source: str | None = None
-    if is_deletion or is_insertion:
-        if anchor_base is None:
-            anchor = "N"
-            anchor_source = "placeholder"
-        else:
-            anchor = anchor_base(mutation.chromosome, position)
-            anchor_source = "reference"
-        if is_deletion:
-            reference_allele = anchor + mutation.reference_allele
-            alternate_allele = anchor
-        else:
-            reference_allele = anchor
-            alternate_allele = anchor + mutation.variant_allele
-    else:
-        reference_allele = mutation.reference_allele
-        alternate_allele = mutation.variant_allele
-        if not reference_allele or not alternate_allele:
+    if is_deletion:
+        low, _high, negative = _lift_span(lift_position, mutation, context)
+        position = low - 1
+        if position < 1:
             return None
+        deleted = _reverse_complement(reference_allele) if negative else reference_allele
+        anchor, anchor_source = _resolve_anchor(anchor_base, mutation.chromosome, position)
+        reference_allele = anchor + deleted
+        variant_allele = anchor
+    elif is_insertion:
+        lifted = _lift(lift_position, mutation, context, mutation.start_position)
+        position = lifted.position - 1 if lifted.negative_strand else lifted.position
+        if position < 1:
+            return None
+        inserted = _reverse_complement(variant_allele) if lifted.negative_strand else variant_allele
+        anchor, anchor_source = _resolve_anchor(anchor_base, mutation.chromosome, position)
+        reference_allele = anchor
+        variant_allele = anchor + inserted
+    else:
+        if not reference_allele or not variant_allele:
+            return None
+        low, _high, negative = _lift_span(lift_position, mutation, context)
+        position = low
+        if negative:
+            reference_allele = _reverse_complement(reference_allele)
+            variant_allele = _reverse_complement(variant_allele)
 
     info = _build_info(
         mutation,
@@ -355,8 +523,8 @@ def build_record(
         contig=mutation.chromosome,
         position=position,
         identifier=_identifier(mutation),
-        reference_allele=reference_allele.upper(),
-        alternate_allele=alternate_allele.upper(),
+        reference_allele=reference_allele,
+        alternate_allele=variant_allele,
         info=info,
     )
 
@@ -404,16 +572,18 @@ def build_records(
     lift_position: LiftPosition | None,
     anchor_base: AnchorBase | None,
     reference_lookup: ReferenceLookup | None = None,
-    skip_liftover_fails: bool = False,
+    raise_on_liftover_fails: bool = False,
     skip_ref_mismatch: bool = False,
 ) -> tuple[list[VcfRecord], int]:
     """
     Convert many mutations, sorted into the target build's contig order.
 
-    Liftover failures and reference-base mismatches are strict by default: a
-    mutation that cannot be lifted, or an emitted record whose REF disagrees with
-    the supplied reference, raises rather than being silently dropped. The two
-    skip flags downgrade each failure to a warned, dropped record instead.
+    Liftover failures are lenient by default: a mutation that cannot be lifted to
+    the target build is dropped with a warning, so a truth track still builds from
+    the coordinates that do lift. Reference-base mismatches are strict by default:
+    an emitted record whose REF disagrees with the supplied reference raises rather
+    than being silently dropped, since a mismatch signals a miscalled record. Each
+    default has an opt-in that flips it.
 
     Args:
         mutations: The source mutations.
@@ -424,19 +594,19 @@ def build_records(
             anchoring, or None to use a placeholder ``N`` anchor.
         reference_lookup: A callable returning target reference bases over a span,
             used to validate each record's REF allele, or None to skip that check.
-        skip_liftover_fails: Drop and warn on a liftover failure instead of
-            raising :class:`LiftoverError`.
+        raise_on_liftover_fails: Raise :class:`LiftoverError` on a liftover failure
+            instead of dropping the mutation with a warning.
         skip_ref_mismatch: Drop and warn on a reference-base mismatch instead of
             raising :class:`ReferenceMismatchError`.
 
     Returns:
         A tuple of the sorted records and the count of mutations that were
         dropped because they were malformed, sit on a contig that is not part of
-        the target build, or were skipped under one of the skip flags.
+        the target build, could not be lifted, or failed reference validation.
 
     Raises:
-        LiftoverError: When a coordinate cannot be lifted and ``skip_liftover_fails``
-            is False.
+        LiftoverError: When a coordinate cannot be lifted and
+            ``raise_on_liftover_fails`` is True.
         ReferenceMismatchError: When a record's REF disagrees with the reference
             and ``skip_ref_mismatch`` is False.
     """
@@ -449,7 +619,7 @@ def build_records(
                 mutation, context, lift_position=lift_position, anchor_base=anchor_base
             )
         except LiftoverError as error:
-            if not skip_liftover_fails:
+            if raise_on_liftover_fails:
                 raise
             logger.warning(f"Dropping mutation: {error}")
             dropped += 1
@@ -576,9 +746,12 @@ def make_lifter(source: GenomeBuild, target: GenomeBuild) -> LiftPosition | None
     """
     Create a position lifter between two builds, or None when they match.
 
-    The returned callable returns None for a coordinate that fails to lift or
-    that lifts to a different contig, so only confidently mapped positions carry
-    a position through; the caller decides how a None is handled.
+    The lifter works in 1-based coordinates and reports the strand of each match,
+    so the caller can reverse-complement alleles that map to a minus-strand chain
+    block. The returned callable returns None for a coordinate that fails to lift
+    or that lifts to a different contig (including an alt contig), so only
+    confidently mapped positions carry through; the caller decides how a None is
+    handled.
 
     Args:
         source: The build the source coordinates are on.
@@ -589,16 +762,16 @@ def make_lifter(source: GenomeBuild, target: GenomeBuild) -> LiftPosition | None
     """
     if source == target:
         return None
-    lifter = get_lifter(source.ucsc_name, target.ucsc_name)
+    lifter = get_lifter(source.ucsc_name, target.ucsc_name, one_based=True)
 
-    def lift(chromosome: str, position: int) -> int | None:
+    def lift(chromosome: str, position: int) -> LiftedCoordinate | None:
         result = lifter.query(chromosome, position)
         if not result:
             return None
-        lifted_chromosome, lifted_position, _ = result[0]
+        lifted_chromosome, lifted_position, strand = result[0]
         if lifted_chromosome.removeprefix("chr") != chromosome.removeprefix("chr"):
             return None
-        return int(lifted_position)
+        return LiftedCoordinate(position=int(lifted_position), negative_strand=strand == "-")
 
     return lift
 
