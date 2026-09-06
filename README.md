@@ -41,6 +41,16 @@ The build keys are `hg38` and `hg19` (the Ensembl names `GRCh38` and `GRCh37` ar
 
 The query is matched case-insensitively on the leading cell line token, so `MOLT-4`, `MOLT4`, and the full `MOLT4_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE` sample ID all resolve to the same sample.
 
+## Liftover and Validation
+
+CCLE coordinates are hg19, so an hg38 track is produced by lifting each coordinate over the UCSC chain.
+Variants that map to a minus-strand chain block are placed at the lifted position of their left-most base and have their alleles reverse-complemented, so the emitted REF always sits on the hg38 forward strand.
+
+Two independent checks guard the output, with opposite defaults:
+
+- **Liftover failures are lenient by default.** A coordinate that cannot be lifted to the target build (for example one that only maps to an alt contig) is dropped with a warning, so the track still builds from the coordinates that do lift. Pass `--raise-on-liftover-fails` to abort the run on the first coordinate that fails to lift instead.
+- **Reference mismatches are strict by default.** When `--reference` is supplied, every emitted record's REF allele is checked against the reference sequence and a mismatch aborts the run, since a mismatch signals a miscalled record. Pass `--skip-ref-mismatch` to drop such records with a warning instead.
+
 ## VCF INFO Fields
 
 Every record is annotated with compact, self-describing INFO fields.
