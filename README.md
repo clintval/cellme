@@ -36,7 +36,6 @@ cellme "MOLT-4" --build hg38 --reference /ref/hg38.fa --output MOLT-4.hg38.vcf.g
 > Always pass `--reference` with a FASTA for the build you target, as shown above.
 > It ensures the correct anchor bases are set for insertions and deletions.
 > Without it, indel anchor bases fall back to a placeholder `N` and those records are marked `ANCHOR=placeholder`.
-> When `--reference` is given, cellme also validates that every record's REF allele matches the reference at its target position (see [Validation](#validation)).
 
 The build keys are `hg38` and `hg19` (the Ensembl names `GRCh38` and `GRCh37` are accepted as aliases).
 
