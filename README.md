@@ -41,18 +41,6 @@ The build keys are `hg38` and `hg19` (the Ensembl names `GRCh38` and `GRCh37` ar
 
 The query is matched case-insensitively on the leading cell line token, so `MOLT-4`, `MOLT4`, and the full `MOLT4_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE` sample ID all resolve to the same sample.
 
-### Contig naming
-
-By default cellme emits UCSC-style, chr-prefixed contig names to match the `hg38` / `hg19` build keys and their UCSC references.
-Both the `##contig` header lines and every record's CHROM use `chr1`..`chr22`, `chrX`, `chrY`, and `chrM` for the mitochondrion.
-
-Pass `--contig-style ensembl` to opt out and emit the unprefixed Ensembl names (`1`..`22`, `X`, `Y`, `MT`) instead; `--contig-style ucsc` is the default.
-
-> [!NOTE]
-> cellme's mitochondrion is the rCRS sequence (length 16569), which is exactly UCSC hg38 `chrM`.
-> UCSC hg19's own `chrM` is instead the older NC_001807 sequence (length 16571), so under `hg19` the emitted `chrM` matches GRCh37/rCRS rather than UCSC-hg19's `chrM`.
-> CCLE cancer variants essentially never fall on the mitochondrion, so this is a low-impact edge case.
-
 ## VCF INFO Fields
 
 Every record is annotated with compact, self-describing INFO fields.
