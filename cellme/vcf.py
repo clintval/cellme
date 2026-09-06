@@ -10,9 +10,11 @@ from typing import ClassVar
 import pysam
 from liftover import get_lifter
 
+from cellme.builds import ContigStyle
 from cellme.builds import GenomeBuild
 from cellme.builds import contig_order
 from cellme.builds import contigs_for
+from cellme.builds import styled_contig
 from cellme.cbioportal import Mutation
 
 logger = logging.getLogger("cellme")
@@ -641,13 +643,22 @@ def build_records(
     return records, dropped
 
 
-def build_header(context: TrackContext, version: str) -> "pysam.VariantHeader":
+def build_header(
+    context: TrackContext,
+    version: str,
+    *,
+    contig_style: ContigStyle = ContigStyle.ucsc,
+) -> "pysam.VariantHeader":
     """
     Build a VCF header for the target build with the full INFO schema.
 
     Args:
         context: The shared per-run context.
         version: The cellme version string, written to the ``source`` line.
+        contig_style: The naming convention for the ``##contig`` lines. UCSC
+            chr-prefixed names are the default; ``ensembl`` writes the unprefixed
+            names. This must match the style passed to :func:`write_vcf`, so that
+            each record's CHROM names a contig declared in the header.
 
     Returns:
         A pysam variant header populated with meta, contig, and INFO lines.
@@ -659,8 +670,12 @@ def build_header(context: TrackContext, version: str) -> "pysam.VariantHeader":
     header.add_line(f"##cellme_sampleId={context.sample_id}")
     header.add_line(f"##cellme_sourceStudy=cBioPortal CCLE {context.study}")
     header.add_line(f"##cellme_sourceBuild={context.source_build.grch_name}")
+    # The lengths come from cellme's rCRS-based contig tables. Under UCSC naming
+    # the mitochondrion is emitted as chrM at its rCRS length (16569); on hg19
+    # that length matches GRCh37/rCRS rather than UCSC-hg19's older chrM (16571).
+    # See cellme.builds.styled_contig for the full rationale.
     for name, length in contigs_for(context.target_build):
-        header.add_line(f"##contig=<ID={name},length={length}>")
+        header.add_line(f"##contig=<ID={styled_contig(name, contig_style)},length={length}>")
     for field in INFO_FIELDS:
         header.add_line(
             f"##INFO=<ID={field.key},Number={field.number},"
@@ -669,13 +684,23 @@ def build_header(context: TrackContext, version: str) -> "pysam.VariantHeader":
     return header
 
 
-def _to_pysam_record(header: "pysam.VariantHeader", record: VcfRecord) -> "pysam.VariantRecord":
+def _to_pysam_record(
+    header: "pysam.VariantHeader",
+    record: VcfRecord,
+    contig_style: ContigStyle,
+) -> "pysam.VariantRecord":
     """
     Materialize a VcfRecord as a pysam record bound to a header.
+
+    The record's contig is held internally in Ensembl style and is rendered into
+    ``contig_style`` here, so the CHROM written names the same contig the header
+    declared under that style.
 
     Args:
         header: The header the record will be written under.
         record: The record to materialize.
+        contig_style: The naming convention for the emitted CHROM. It must match
+            the style the header was built with.
 
     Returns:
         A pysam variant record ready to be written.
@@ -683,7 +708,7 @@ def _to_pysam_record(header: "pysam.VariantHeader", record: VcfRecord) -> "pysam
     start = record.position - 1
     stop = start + len(record.reference_allele)
     return header.new_record(
-        contig=record.contig,
+        contig=styled_contig(record.contig, contig_style),
         start=start,
         stop=stop,
         alleles=(record.reference_allele, record.alternate_allele),
@@ -696,6 +721,8 @@ def write_vcf(
     records: Iterable[VcfRecord],
     header: "pysam.VariantHeader",
     output: Path | None,
+    *,
+    contig_style: ContigStyle = ContigStyle.ucsc,
 ) -> None:
     """
     Write records to a VCF at a path, or to standard output when no path given.
@@ -709,13 +736,15 @@ def write_vcf(
         records: The records to write, already in sorted order.
         header: The header to write them under.
         output: The destination path, or None to write to standard output.
+        contig_style: The naming convention for each record's CHROM. It must match
+            the style ``header`` was built with; both default to UCSC.
     """
     if output is None:
-        _write_records("-", header, records, compressed=False)
+        _write_records("-", header, records, compressed=False, contig_style=contig_style)
         return
     destination = str(output)
     compressed = destination.endswith(".gz")
-    _write_records(destination, header, records, compressed=compressed)
+    _write_records(destination, header, records, compressed=compressed, contig_style=contig_style)
     if compressed:
         pysam.tabix_index(destination, preset="vcf", force=True)
 
@@ -726,6 +755,7 @@ def _write_records(
     records: Iterable[VcfRecord],
     *,
     compressed: bool,
+    contig_style: ContigStyle,
 ) -> None:
     """
     Write records to a destination, BGZF-compressed when ``compressed`` is set.
@@ -735,11 +765,13 @@ def _write_records(
         header: The header to write the records under.
         records: The records to write, already in sorted order.
         compressed: Whether to write a block-gzip compressed VCF.
+        contig_style: The naming convention for each record's CHROM, matching the
+            header.
     """
     mode = "wz" if compressed else "w"
     with pysam.VariantFile(destination, mode, header=header) as out:
         for record in records:
-            out.write(_to_pysam_record(header, record))
+            out.write(_to_pysam_record(header, record, contig_style))
 
 
 def make_lifter(source: GenomeBuild, target: GenomeBuild) -> LiftPosition | None:

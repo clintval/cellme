@@ -1,8 +1,10 @@
 import pytest
 
+from cellme.builds import ContigStyle
 from cellme.builds import GenomeBuild
 from cellme.builds import contig_order
 from cellme.builds import contigs_for
+from cellme.builds import styled_contig
 
 
 def test_canonical_members_have_two_builds() -> None:
@@ -76,3 +78,20 @@ def test_builds_disagree_on_chromosome_lengths() -> None:
 def test_contig_order_is_karyotypic() -> None:
     order = contig_order(GenomeBuild.hg38)
     assert order["1"] < order["2"] < order["22"] < order["X"] < order["MT"]
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [("1", "chr1"), ("22", "chr22"), ("X", "chrX"), ("Y", "chrY")],
+)
+def test_styled_contig_ucsc_prefixes_primary_contigs(name: str, expected: str) -> None:
+    assert styled_contig(name, ContigStyle.ucsc) == expected
+
+
+def test_styled_contig_ucsc_mitochondrion_is_chr_m() -> None:
+    assert styled_contig("MT", ContigStyle.ucsc) == "chrM"
+
+
+@pytest.mark.parametrize("name", ["1", "22", "X", "Y", "MT"])
+def test_styled_contig_ensembl_is_identity(name: str) -> None:
+    assert styled_contig(name, ContigStyle.ensembl) == name
