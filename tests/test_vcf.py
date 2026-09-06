@@ -6,6 +6,7 @@ from typing import Any
 import pysam
 import pytest
 
+from cellme.builds import ContigStyle
 from cellme.builds import GenomeBuild
 from cellme.cbioportal import Mutation
 from cellme.vcf import INFO_FIELDS
@@ -502,9 +503,94 @@ def test_header_declares_reference_contigs_and_full_info_schema() -> None:
     header_text = str(build_header(CONTEXT, "0.1.0"))
     assert "##reference=GRCh38" in header_text
     assert "##source=cellme 0.1.0" in header_text
-    assert "##contig=<ID=17,length=83257441>" in header_text
+    assert "##contig=<ID=chr17,length=83257441>" in header_text
     for field in INFO_FIELDS:
         assert f"##INFO=<ID={field.key}," in header_text
+
+
+def test_header_contigs_are_chr_prefixed_by_default() -> None:
+    header_text = str(build_header(CONTEXT, "0.1.0"))
+    for index in range(1, 23):
+        assert f"##contig=<ID=chr{index}," in header_text
+    assert "##contig=<ID=chrX," in header_text
+    assert "##contig=<ID=chrY," in header_text
+    # The mitochondrion is emitted as UCSC chrM at its rCRS length, never chrMT.
+    assert "##contig=<ID=chrM,length=16569>" in header_text
+    assert "chrMT" not in header_text
+    # No unprefixed primary contig leaks into the default (UCSC) header.
+    assert "##contig=<ID=1," not in header_text
+
+
+def test_ensembl_contig_style_header_is_unprefixed() -> None:
+    header_text = str(build_header(CONTEXT, "0.1.0", contig_style=ContigStyle.ensembl))
+    assert "##contig=<ID=17,length=83257441>" in header_text
+    assert "##contig=<ID=MT,length=16569>" in header_text
+    assert "##contig=<ID=chr17," not in header_text
+    assert "chrM" not in header_text
+
+
+def test_written_record_chrom_is_chr_prefixed_by_default(tmp_path: Path) -> None:
+    records, _dropped = build_records(
+        [make_mutation()], SAME_BUILD_CONTEXT, lift_position=None, anchor_base=None
+    )
+    header = build_header(SAME_BUILD_CONTEXT, "0.1.0")
+    output = tmp_path / "molt4.vcf"
+    write_vcf(records, header, output)
+    with pysam.VariantFile(str(output)) as vcf:
+        assert [record.contig for record in vcf] == ["chr17"]
+
+
+def test_written_mitochondrial_record_chrom_is_chr_m_not_chr_mt(tmp_path: Path) -> None:
+    mutation = make_mutation(
+        gene="MT-ND1",
+        chromosome="MT",
+        start_position=10,
+        end_position=10,
+        reference_allele="G",
+        variant_allele="A",
+    )
+    records, dropped = build_records(
+        [mutation], SAME_BUILD_CONTEXT, lift_position=None, anchor_base=None
+    )
+    assert dropped == 0
+    header = build_header(SAME_BUILD_CONTEXT, "0.1.0")
+    output = tmp_path / "mt.vcf"
+    write_vcf(records, header, output)
+    with pysam.VariantFile(str(output)) as vcf:
+        assert [record.contig for record in vcf] == ["chrM"]
+
+
+def test_ensembl_contig_style_writes_unprefixed_record(tmp_path: Path) -> None:
+    records, _dropped = build_records(
+        [make_mutation()], SAME_BUILD_CONTEXT, lift_position=None, anchor_base=None
+    )
+    header = build_header(SAME_BUILD_CONTEXT, "0.1.0", contig_style=ContigStyle.ensembl)
+    output = tmp_path / "molt4.ensembl.vcf"
+    write_vcf(records, header, output, contig_style=ContigStyle.ensembl)
+    with pysam.VariantFile(str(output)) as vcf:
+        assert [record.contig for record in vcf] == ["17"]
+
+
+def lift_in_place(_chromosome: str, position: int) -> LiftedCoordinate:
+    return LiftedCoordinate(position=position, negative_strand=False)
+
+
+def test_lifted_record_validates_against_chr_named_reference(tmp_path: Path) -> None:
+    # A lifted record keeps its contig internally in Ensembl (unprefixed) form, so
+    # it still resolves against a reference whose contigs carry the UCSC chr prefix.
+    fasta = tmp_path / "ref.fa"
+    fasta.write_text(">chr17\nACGTACGTACGT\n")
+    pysam.faidx(str(fasta))
+    reference_lookup = make_reference_lookup(fasta)
+    assert reference_lookup is not None
+    mutation = make_mutation(
+        start_position=3, end_position=3, reference_allele="G", variant_allele="A"
+    )
+    record = build_record(mutation, CONTEXT, lift_position=lift_in_place, anchor_base=None)
+    assert record is not None
+    assert record.contig == "17"
+    assert record.info["LIFTED"] is True
+    validate_reference_allele(record, mutation, CONTEXT, reference_lookup)
 
 
 def _one_record_and_header() -> tuple[list[VcfRecord], "pysam.VariantHeader"]:

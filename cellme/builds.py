@@ -50,6 +50,63 @@ class GenomeBuild(StrEnum):
         return {GenomeBuild.hg38: "GRCh38", GenomeBuild.hg19: "GRCh37"}[self]
 
 
+class ContigStyle(StrEnum):
+    """
+    The contig-naming convention for the emitted VCF's header and CHROM column.
+
+    ``ucsc`` writes chr-prefixed names (``chr1``..``chr22``, ``chrX``, ``chrY``,
+    and ``chrM`` for the mitochondrion), matching the ``hg38`` / ``hg19`` build
+    keys and the UCSC references those keys name; it is the default. ``ensembl``
+    writes the unprefixed primary-assembly names (``1``..``22``, ``X``, ``Y``,
+    ``MT``) that CCLE and cellme's internal contig tables use, for users who want
+    the Ensembl style instead.
+    """
+
+    ucsc = "ucsc"
+    ensembl = "ensembl"
+
+
+_MITOCHONDRION_ENSEMBL: str = "MT"
+"""The Ensembl (internal) contig name for the mitochondrion."""
+
+_MITOCHONDRION_UCSC: str = "chrM"
+"""The UCSC contig name for the mitochondrion."""
+
+
+def styled_contig(name: str, style: ContigStyle) -> str:
+    """
+    Render an internal Ensembl-style contig name in the requested output style.
+
+    cellme's internal contig tables and the raw CCLE coordinates both use
+    Ensembl-style primary-assembly names (``1``..``22``, ``X``, ``Y``, ``MT``).
+    This maps one such name to the name written into the emitted VCF: for
+    :attr:`ContigStyle.ucsc` the UCSC chr-prefixed form (``chr1``.., ``chrX``,
+    ``chrY``, and ``chrM`` for the mitochondrion); for :attr:`ContigStyle.ensembl`
+    the name unchanged.
+
+    The mitochondrion is emitted as UCSC ``chrM``, not ``chrMT``. cellme's ``MT``
+    is the rCRS sequence (length 16569). On hg38 that is exactly UCSC's ``chrM``,
+    so the mapping is faithful. On hg19, UCSC's own ``chrM`` is instead the older
+    NC_001807 sequence (length 16571), so the ``chrM`` emitted here carries the
+    rCRS length (16569) and matches GRCh37/rCRS rather than UCSC-hg19's ``chrM``;
+    the length is left at rCRS deliberately. CCLE cancer variants essentially
+    never fall on the mitochondrion, so this is a low-impact edge case, called out
+    here rather than silently mislabeled.
+
+    Args:
+        name: An internal primary-assembly contig name in Ensembl style.
+        style: The naming convention to render it in.
+
+    Returns:
+        The contig name in the requested style.
+    """
+    if style is ContigStyle.ensembl:
+        return name
+    if name == _MITOCHONDRION_ENSEMBL:
+        return _MITOCHONDRION_UCSC
+    return f"chr{name}"
+
+
 GRCH37_CONTIGS: tuple[tuple[str, int], ...] = (
     ("1", 249250621),
     ("2", 243199373),

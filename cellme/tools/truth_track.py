@@ -6,6 +6,7 @@ from pathlib import Path
 import requests
 
 from cellme import __version__
+from cellme.builds import ContigStyle
 from cellme.builds import GenomeBuild
 from cellme.cbioportal import DEFAULT_STUDY
 from cellme.cbioportal import cell_line_name
@@ -30,6 +31,7 @@ def truth_track(
     query: str,
     *,
     build: GenomeBuild = GenomeBuild.hg38,
+    contig_style: ContigStyle = ContigStyle.ucsc,
     reference: Path | None = None,
     output: Path | None = None,
     study: str = DEFAULT_STUDY,
@@ -47,6 +49,12 @@ def truth_track(
     minus-strand chain block. When the output path ends in ``.gz`` the VCF is BGZF
     compressed and a tabix ``.tbi`` index is written alongside it.
 
+    The contig header lines and every record's CHROM use UCSC chr-prefixed names
+    by default (chr1 through chr22, chrX, chrY, and chrM for the mitochondrion),
+    matching the ``hg38`` / ``hg19`` build keys and their UCSC references. Pass
+    ``--contig-style ensembl`` for the unprefixed Ensembl names (1 through 22, X,
+    Y, and MT) instead.
+
     Liftover failures are lenient by default: a coordinate that cannot be lifted
     to the target build is dropped with a warning, so the truth track still builds
     from the coordinates that do lift. Pass ``--raise-on-liftover-fails`` to abort
@@ -60,6 +68,9 @@ def truth_track(
         query: Cell line identifier, e.g. MOLT-4, MOLT4, or a full CCLE sample id.
         build: Target genome build for the emitted VCF: hg38 or hg19 (the aliases
             GRCh38 and GRCh37 are also accepted).
+        contig_style: Naming convention for the emitted contig header lines and
+            CHROM column: ucsc for chr-prefixed names (the default) or ensembl for
+            the unprefixed names.
         reference: Reference FASTA for the target build. It is used to place
             spec-compliant anchor bases on insertions and deletions and, when
             supplied, to validate that each record's REF allele matches the
@@ -102,6 +113,6 @@ def truth_track(
     )
     if dropped:
         logger.warning(f"Dropped {dropped} of {len(mutations)} mutations while building {build}")
-    header = build_header(context, __version__)
-    write_vcf(records, header, output)
+    header = build_header(context, __version__, contig_style=contig_style)
+    write_vcf(records, header, output, contig_style=contig_style)
     logger.info(f"Wrote {len(records)} records for {context.cell_line} on {build}")

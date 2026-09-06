@@ -87,6 +87,72 @@ def test_cli_help_lists_the_validation_flags(
     assert "--skip-ref-mismatch" in help_text
 
 
+def test_cli_help_lists_the_contig_style_flag(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    """`cellme --help` should advertise the contig-style opt-out and its choices."""
+    monkeypatch.setattr("sys.argv", ["cellme", "--help"])
+    with pytest.raises(SystemExit):
+        main.run()
+    help_text = capsys.readouterr().out
+    assert "--contig-style" in help_text
+    assert "{ucsc,ensembl}" in help_text
+
+
+def test_cli_writes_chr_prefixed_contigs_by_default(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    """Without --contig-style the emitted CHROM is UCSC chr-prefixed."""
+    reference = _write_reference(tmp_path)
+    _patch_cbioportal(monkeypatch, _snv_on_contig_17("A"))
+    output = tmp_path / "out.vcf"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "cellme",
+            "MOLT4",
+            "--build",
+            "hg19",
+            "--reference",
+            str(reference),
+            "--output",
+            str(output),
+        ],
+    )
+    main.run()
+    with pysam.VariantFile(str(output)) as vcf:
+        assert [record.contig for record in vcf] == ["chr17"]
+        assert "##contig=<ID=chr17," in str(vcf.header)
+
+
+def test_cli_ensembl_contig_style_writes_unprefixed_contigs(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    """--contig-style ensembl opts back into the unprefixed Ensembl names."""
+    reference = _write_reference(tmp_path)
+    _patch_cbioportal(monkeypatch, _snv_on_contig_17("A"))
+    output = tmp_path / "out.vcf"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "cellme",
+            "MOLT4",
+            "--build",
+            "hg19",
+            "--reference",
+            str(reference),
+            "--output",
+            str(output),
+            "--contig-style",
+            "ensembl",
+        ],
+    )
+    main.run()
+    with pysam.VariantFile(str(output)) as vcf:
+        assert [record.contig for record in vcf] == ["17"]
+        assert "##contig=<ID=17," in str(vcf.header)
+
+
 def test_cli_aborts_on_reference_mismatch_by_default(
     monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
 ) -> None:
