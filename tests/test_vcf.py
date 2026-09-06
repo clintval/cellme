@@ -494,6 +494,29 @@ def test_make_reference_lookup_matches_chr_prefixed_contigs(tmp_path: Path) -> N
     assert reference_lookup("17", 1, 4) == "ACGT"
 
 
+def test_make_reference_lookup_matches_ucsc_mitochondrion(tmp_path: Path) -> None:
+    # The internal contig is "MT"; a UCSC reference names the mitochondrion "chrM".
+    fasta = tmp_path / "ref.fa"
+    fasta.write_text(">chrM\nGATCGATCGATC\n")
+    pysam.faidx(str(fasta))
+    reference_lookup = make_reference_lookup(fasta)
+    assert reference_lookup is not None
+    assert reference_lookup("MT", 1, 4) == "GATC"
+    anchor_base = make_anchor_base(reference_lookup)
+    assert anchor_base is not None
+    assert anchor_base("MT", 2) == "A"
+
+
+def test_make_reference_lookup_matches_ensembl_mitochondrion(tmp_path: Path) -> None:
+    # An Ensembl reference names the mitochondrion "MT"; it must still resolve.
+    fasta = tmp_path / "ref.fa"
+    fasta.write_text(">MT\nGATCGATCGATC\n")
+    pysam.faidx(str(fasta))
+    reference_lookup = make_reference_lookup(fasta)
+    assert reference_lookup is not None
+    assert reference_lookup("MT", 1, 4) == "GATC"
+
+
 def test_make_reference_lookup_is_none_without_reference() -> None:
     assert make_reference_lookup(None) is None
     assert make_anchor_base(None) is None

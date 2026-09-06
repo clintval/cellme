@@ -808,13 +808,41 @@ def make_lifter(source: GenomeBuild, target: GenomeBuild) -> LiftPosition | None
     return lift
 
 
+_MITOCHONDRION_REFERENCE_ALIASES: tuple[str, ...] = ("MT", "chrMT", "chrM")
+"""FASTA contig names the mitochondrion may be stored under: Ensembl ``MT`` or UCSC ``chrM``."""
+
+
+def _reference_contig_aliases(chromosome: str) -> tuple[str, ...]:
+    """
+    Return the FASTA contig names an internal contig may be stored under.
+
+    Internal contigs use Ensembl primary names, so a reference may spell a contig
+    bare (``17``) or chr-prefixed (``chr17``); both are tried. The mitochondrion
+    is the exception: cellme's internal ``MT`` is written ``MT`` in an Ensembl
+    reference but ``chrM`` in a UCSC reference, so both are tried for it. On hg38,
+    UCSC ``chrM`` is the rCRS sequence cellme uses; on hg19, UCSC ``chrM`` is the
+    older NC_001807 sequence, so validating an hg19 mitochondrial variant against
+    a UCSC reference can legitimately surface a mismatch there.
+
+    Args:
+        chromosome: An internal primary-assembly contig name in Ensembl style.
+
+    Returns:
+        The candidate FASTA contig names to try, in order.
+    """
+    if chromosome == "MT":
+        return _MITOCHONDRION_REFERENCE_ALIASES
+    return (chromosome, f"chr{chromosome}")
+
+
 def make_reference_lookup(reference: Path | None) -> ReferenceLookup | None:
     """
     Open a reference FASTA and return a lookup over 1-based, inclusive spans.
 
     The FASTA is matched by contig name with and without a ``chr`` prefix, so a
-    reference using either naming convention works. A contig absent from the
-    FASTA, or a span past its end, yields an empty string.
+    reference using either naming convention works. The mitochondrion is matched
+    under both its Ensembl name ``MT`` and its UCSC name ``chrM``. A contig absent
+    from the FASTA, or a span past its end, yields an empty string.
 
     Args:
         reference: The path to a FASTA for the target build, or None.
@@ -829,7 +857,7 @@ def make_reference_lookup(reference: Path | None) -> ReferenceLookup | None:
     contigs = set(fasta.references)
 
     def lookup(chromosome: str, start: int, end: int) -> str:
-        for name in (chromosome, f"chr{chromosome}"):
+        for name in _reference_contig_aliases(chromosome):
             if name in contigs:
                 return fasta.fetch(name, start - 1, end).upper()
         return ""
