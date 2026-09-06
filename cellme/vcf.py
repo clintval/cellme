@@ -1,9 +1,11 @@
 """Conversion of CCLE mutations into a sorted, well-described truth-track VCF."""
 
+import logging
 from collections.abc import Callable
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 import pysam
 from liftover import get_lifter
@@ -13,17 +15,65 @@ from cellme.builds import contig_order
 from cellme.builds import contigs_for
 from cellme.cbioportal import Mutation
 
+logger = logging.getLogger("cellme")
+
 LiftPosition = Callable[[str, int], int | None]
 """A callable mapping a source (contig, 1-based position) to a lifted position."""
 
 AnchorBase = Callable[[str, int], str]
 """A callable returning the single reference base at a (contig, 1-based position)."""
 
+ReferenceLookup = Callable[[str, int, int], str]
+"""A callable returning the reference bases over a 1-based, inclusive ``[start, end]`` span."""
+
 _DASH: str = "-"
 """The MAF sentinel for the absent allele of an insertion or deletion."""
 
 InfoValue = str | int | bool
 """The value types cellme writes into a VCF INFO field."""
+
+
+class TruthTrackError(Exception):
+    """
+    Base class for failures raised while building truth-track VCF records.
+
+    Each subclass records the command-line flag that downgrades the failure from
+    a raised error to a dropped-and-warned record, so the command line can point
+    the user at the matching opt-out.
+    """
+
+    opt_out_flag: ClassVar[str] = ""
+    """The command-line flag that turns this error into a dropped, warned record."""
+
+
+class LiftoverError(TruthTrackError):
+    """Raised when a mutation's coordinate cannot be lifted to the target build."""
+
+    opt_out_flag: ClassVar[str] = "--skip-liftover-fails"
+
+
+class ReferenceMismatchError(TruthTrackError):
+    """Raised when a record's REF allele disagrees with the target reference."""
+
+    opt_out_flag: ClassVar[str] = "--skip-ref-mismatch"
+
+
+def _describe(mutation: Mutation) -> str:
+    """
+    Render a short, human-readable label for a mutation for use in messages.
+
+    Args:
+        mutation: The source mutation.
+
+    Returns:
+        A ``gene proteinChange`` label when both are known, the gene alone when
+        only it is known, otherwise the literal ``variant``.
+    """
+    if mutation.gene and mutation.protein_change:
+        return f"{mutation.gene} {mutation.protein_change}"
+    if mutation.gene:
+        return mutation.gene
+    return "variant"
 
 
 @dataclass(frozen=True)
@@ -246,8 +296,11 @@ def build_record(
             anchoring, or None to use a placeholder ``N`` anchor.
 
     Returns:
-        The converted record, or None when the mutation is malformed or its
-        coordinate cannot be lifted to the target build.
+        The converted record, or None when the mutation is malformed.
+
+    Raises:
+        LiftoverError: When ``lift_position`` cannot map the coordinate to the
+            target build. The message names the variant and its source locus.
     """
     is_deletion = mutation.variant_allele == _DASH
     is_insertion = mutation.reference_allele == _DASH
@@ -266,7 +319,10 @@ def build_record(
     else:
         lifted_position = lift_position(mutation.chromosome, source_position)
         if lifted_position is None:
-            return None
+            raise LiftoverError(
+                f"Could not lift {_describe(mutation)} at {_original_locus(mutation)} "
+                f"from {context.source_build.grch_name} to {context.target_build.grch_name}."
+            )
         position = lifted_position
 
     anchor_source: str | None = None
@@ -305,15 +361,59 @@ def build_record(
     )
 
 
+def validate_reference_allele(
+    record: VcfRecord,
+    mutation: Mutation,
+    context: TrackContext,
+    reference_lookup: ReferenceLookup,
+) -> None:
+    """
+    Check that a record's REF allele matches the target reference sequence.
+
+    The reference bases spanning the record's REF allele are read from the target
+    FASTA and compared to the emitted REF. A single-base REF (a substitution or an
+    insertion anchor) checks one base; a multi-base REF (a deletion's anchor base
+    plus its deleted bases) checks the whole span.
+
+    Args:
+        record: The built record, already positioned on the target build.
+        mutation: The source mutation, used only to describe a mismatch.
+        context: The shared per-run context, used to name the target build.
+        reference_lookup: A callable returning the target reference bases over a
+            1-based, inclusive span.
+
+    Raises:
+        ReferenceMismatchError: When the REF allele disagrees with the reference.
+            The message names the variant, the expected REF, and the actual bases.
+    """
+    expected = record.reference_allele
+    end = record.position + len(expected) - 1
+    actual = reference_lookup(record.contig, record.position, end)
+    if actual != expected:
+        raise ReferenceMismatchError(
+            f"REF allele for {_describe(mutation)} at {record.contig}:{record.position} "
+            f"on {context.target_build.grch_name} does not match the reference: "
+            f"expected REF {expected!r} but the reference has {actual!r}."
+        )
+
+
 def build_records(
     mutations: Iterable[Mutation],
     context: TrackContext,
     *,
     lift_position: LiftPosition | None,
     anchor_base: AnchorBase | None,
+    reference_lookup: ReferenceLookup | None = None,
+    skip_liftover_fails: bool = False,
+    skip_ref_mismatch: bool = False,
 ) -> tuple[list[VcfRecord], int]:
     """
     Convert many mutations, sorted into the target build's contig order.
+
+    Liftover failures and reference-base mismatches are strict by default: a
+    mutation that cannot be lifted, or an emitted record whose REF disagrees with
+    the supplied reference, raises rather than being silently dropped. The two
+    skip flags downgrade each failure to a warned, dropped record instead.
 
     Args:
         mutations: The source mutations.
@@ -322,22 +422,50 @@ def build_records(
             build, or None when the source and target builds are the same.
         anchor_base: A callable returning the target reference base for indel
             anchoring, or None to use a placeholder ``N`` anchor.
+        reference_lookup: A callable returning target reference bases over a span,
+            used to validate each record's REF allele, or None to skip that check.
+        skip_liftover_fails: Drop and warn on a liftover failure instead of
+            raising :class:`LiftoverError`.
+        skip_ref_mismatch: Drop and warn on a reference-base mismatch instead of
+            raising :class:`ReferenceMismatchError`.
 
     Returns:
         A tuple of the sorted records and the count of mutations that were
-        dropped because they were malformed, could not be lifted, or sit on a
-        contig that is not part of the target build.
+        dropped because they were malformed, sit on a contig that is not part of
+        the target build, or were skipped under one of the skip flags.
+
+    Raises:
+        LiftoverError: When a coordinate cannot be lifted and ``skip_liftover_fails``
+            is False.
+        ReferenceMismatchError: When a record's REF disagrees with the reference
+            and ``skip_ref_mismatch`` is False.
     """
     order = contig_order(context.target_build)
     records: list[VcfRecord] = []
     dropped = 0
     for mutation in mutations:
-        record = build_record(
-            mutation, context, lift_position=lift_position, anchor_base=anchor_base
-        )
+        try:
+            record = build_record(
+                mutation, context, lift_position=lift_position, anchor_base=anchor_base
+            )
+        except LiftoverError as error:
+            if not skip_liftover_fails:
+                raise
+            logger.warning(f"Dropping mutation: {error}")
+            dropped += 1
+            continue
         if record is None or record.contig not in order:
             dropped += 1
             continue
+        if reference_lookup is not None:
+            try:
+                validate_reference_allele(record, mutation, context, reference_lookup)
+            except ReferenceMismatchError as error:
+                if not skip_ref_mismatch:
+                    raise
+                logger.warning(f"Dropping mutation: {error}")
+                dropped += 1
+                continue
         records.append(record)
     records.sort(key=lambda record: (order[record.contig], record.position))
     return records, dropped
@@ -448,8 +576,9 @@ def make_lifter(source: GenomeBuild, target: GenomeBuild) -> LiftPosition | None
     """
     Create a position lifter between two builds, or None when they match.
 
-    The returned callable drops coordinates that fail to lift or that lift to a
-    different contig, so that only confidently mapped positions are emitted.
+    The returned callable returns None for a coordinate that fails to lift or
+    that lifts to a different contig, so only confidently mapped positions carry
+    a position through; the caller decides how a None is handled.
 
     Args:
         source: The build the source coordinates are on.
@@ -474,18 +603,19 @@ def make_lifter(source: GenomeBuild, target: GenomeBuild) -> LiftPosition | None
     return lift
 
 
-def make_anchor_base(reference: Path | None) -> AnchorBase | None:
+def make_reference_lookup(reference: Path | None) -> ReferenceLookup | None:
     """
-    Open a reference FASTA and return a base lookup for indel anchoring.
+    Open a reference FASTA and return a lookup over 1-based, inclusive spans.
 
     The FASTA is matched by contig name with and without a ``chr`` prefix, so a
-    reference using either naming convention works.
+    reference using either naming convention works. A contig absent from the
+    FASTA, or a span past its end, yields an empty string.
 
     Args:
         reference: The path to a FASTA for the target build, or None.
 
     Returns:
-        A callable returning the reference base at a 1-based position, or None
+        A callable returning the uppercased reference bases over a span, or None
         when no reference was supplied.
     """
     if reference is None:
@@ -493,11 +623,32 @@ def make_anchor_base(reference: Path | None) -> AnchorBase | None:
     fasta = pysam.FastaFile(str(reference))
     contigs = set(fasta.references)
 
-    def anchor(chromosome: str, position: int) -> str:
+    def lookup(chromosome: str, start: int, end: int) -> str:
         for name in (chromosome, f"chr{chromosome}"):
             if name in contigs:
-                base = fasta.fetch(name, position - 1, position)
-                return base.upper() if base else "N"
-        return "N"
+                return fasta.fetch(name, start - 1, end).upper()
+        return ""
+
+    return lookup
+
+
+def make_anchor_base(reference_lookup: ReferenceLookup | None) -> AnchorBase | None:
+    """
+    Adapt a reference lookup into a single-base anchor lookup for indels.
+
+    Args:
+        reference_lookup: A span lookup from :func:`make_reference_lookup`, or None.
+
+    Returns:
+        A callable returning the reference base at a 1-based position, falling
+        back to a placeholder ``N`` when the base is unavailable, or None when no
+        reference lookup was supplied.
+    """
+    if reference_lookup is None:
+        return None
+
+    def anchor(chromosome: str, position: int) -> str:
+        base = reference_lookup(chromosome, position, position)
+        return base if base else "N"
 
     return anchor

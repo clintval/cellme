@@ -36,10 +36,25 @@ cellme "MOLT-4" --build hg38 --reference /ref/hg38.fa --output MOLT-4.hg38.vcf.g
 > Always pass `--reference` with a FASTA for the build you target, as shown above.
 > It ensures the correct anchor bases are set for insertions and deletions.
 > Without it, indel anchor bases fall back to a placeholder `N` and those records are marked `ANCHOR=placeholder`.
+> When `--reference` is given, cellme also validates that every record's REF allele matches the reference at its target position (see [Validation](#validation)).
 
 The build keys are `hg38` and `hg19` (the Ensembl names `GRCh38` and `GRCh37` are accepted as aliases).
 
 The query is matched case-insensitively on the leading cell line token, so `MOLT-4`, `MOLT4`, and the full `MOLT4_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE` sample ID all resolve to the same sample.
+
+## Validation
+
+cellme is strict by default so a truth track is never silently partial or inconsistent.
+Both checks below abort the run with an actionable error, and each has an opt-out that drops the offending variant with a warning instead.
+
+- **Liftover failures.**
+  CCLE reports hg19 (GRCh37) coordinates; lifting them to the target build can fail.
+  By default a failure aborts the run, naming the offending variant and its source locus, so a partial truth track never goes unnoticed.
+  Pass `--skip-liftover-fails` to drop unliftable variants with a warning instead.
+- **REF-base checks.**
+  Whenever `--reference` is given, cellme verifies that each emitted record's REF allele matches the reference sequence at its (post-liftover) target position: a single base for substitutions, and the anchor plus deleted bases for deletions.
+  By default a mismatch aborts the run, naming the variant, the expected REF, and the actual reference base(s).
+  Pass `--skip-ref-mismatch` to drop mismatched variants with a warning instead.
 
 ## VCF INFO Fields
 

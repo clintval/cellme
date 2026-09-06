@@ -1,16 +1,24 @@
+import logging
 from pathlib import Path
 from typing import Any
 
 import pysam
+import pytest
 
 from cellme.builds import GenomeBuild
 from cellme.cbioportal import Mutation
 from cellme.vcf import INFO_FIELDS
+from cellme.vcf import LiftoverError
+from cellme.vcf import ReferenceLookup
+from cellme.vcf import ReferenceMismatchError
 from cellme.vcf import TrackContext
 from cellme.vcf import VcfRecord
 from cellme.vcf import build_header
 from cellme.vcf import build_record
 from cellme.vcf import build_records
+from cellme.vcf import make_anchor_base
+from cellme.vcf import make_reference_lookup
+from cellme.vcf import validate_reference_allele
 from cellme.vcf import write_vcf
 
 CONTEXT = TrackContext(
@@ -134,10 +142,14 @@ def test_insertion_left_anchors_with_placeholder() -> None:
     assert record.info["ANCHOR"] == "placeholder"
 
 
-def test_unliftable_mutation_is_dropped() -> None:
-    assert (
-        build_record(make_mutation(), CONTEXT, lift_position=never_lifts, anchor_base=None) is None
-    )
+def test_unliftable_mutation_raises_and_names_the_variant() -> None:
+    with pytest.raises(LiftoverError) as excinfo:
+        build_record(make_mutation(), CONTEXT, lift_position=never_lifts, anchor_base=None)
+    message = str(excinfo.value)
+    assert "TP53 R306*" in message
+    assert "chr17:7577022" in message
+    assert "GRCh37" in message
+    assert "GRCh38" in message
 
 
 def test_identifier_falls_back_to_locus_without_protein_change() -> None:
@@ -163,7 +175,9 @@ def test_build_records_sorts_and_counts_drops() -> None:
             return None
         return position
 
-    records, dropped = build_records(mutations, CONTEXT, lift_position=lift, anchor_base=None)
+    records, dropped = build_records(
+        mutations, CONTEXT, lift_position=lift, anchor_base=None, skip_liftover_fails=True
+    )
     assert dropped == 1
     assert [record.contig for record in records] == ["1", "17"]
 
@@ -204,6 +218,162 @@ def test_build_records_drops_unknown_contigs() -> None:
     )
     assert dropped == 1
     assert [record.contig for record in records] == ["17"]
+
+
+def test_build_records_raises_on_liftover_failure_by_default() -> None:
+    mutations = [make_mutation(chromosome="1", start_position=1000)]
+    with pytest.raises(LiftoverError):
+        build_records(mutations, CONTEXT, lift_position=never_lifts, anchor_base=None)
+
+
+def test_build_records_skips_liftover_failure_with_flag(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    mutations = [make_mutation()]
+    with caplog.at_level(logging.WARNING, logger="cellme"):
+        records, dropped = build_records(
+            mutations,
+            CONTEXT,
+            lift_position=never_lifts,
+            anchor_base=None,
+            skip_liftover_fails=True,
+        )
+    assert records == []
+    assert dropped == 1
+    assert "TP53 R306*" in caplog.text
+
+
+def make_fake_lookup(sequence: str, start: int) -> ReferenceLookup:
+    """Return a reference lookup where `sequence` begins at 1-based `start` on any contig."""
+
+    def lookup(_chromosome: str, span_start: int, span_end: int) -> str:
+        return sequence[span_start - start : span_end - start + 1]
+
+    return lookup
+
+
+def test_validate_reference_allele_accepts_matching_snv() -> None:
+    record = build_record(make_mutation(), CONTEXT, lift_position=add_offset, anchor_base=None)
+    assert record is not None
+    reference_lookup = make_fake_lookup("G", record.position)
+    validate_reference_allele(record, make_mutation(), CONTEXT, reference_lookup)
+
+
+def test_validate_reference_allele_raises_on_mismatched_snv() -> None:
+    record = build_record(make_mutation(), CONTEXT, lift_position=add_offset, anchor_base=None)
+    assert record is not None
+    reference_lookup = make_fake_lookup("C", record.position)
+    with pytest.raises(ReferenceMismatchError) as excinfo:
+        validate_reference_allele(record, make_mutation(), CONTEXT, reference_lookup)
+    message = str(excinfo.value)
+    assert "TP53 R306*" in message
+    assert "'G'" in message
+    assert "'C'" in message
+    assert "GRCh38" in message
+
+
+def test_validate_reference_allele_accepts_matching_deletion() -> None:
+    mutation = make_mutation(
+        reference_allele="A",
+        variant_allele="-",
+        variant_class="Frame_Shift_Del",
+        variant_type="DEL",
+    )
+    record = build_record(mutation, CONTEXT, lift_position=add_offset, anchor_base=anchor_is_c)
+    assert record is not None
+    assert record.reference_allele == "CA"
+    reference_lookup = make_fake_lookup("CA", record.position)
+    validate_reference_allele(record, mutation, CONTEXT, reference_lookup)
+
+
+def test_validate_reference_allele_raises_on_mismatched_deletion() -> None:
+    mutation = make_mutation(
+        reference_allele="A",
+        variant_allele="-",
+        variant_class="Frame_Shift_Del",
+        variant_type="DEL",
+    )
+    record = build_record(mutation, CONTEXT, lift_position=add_offset, anchor_base=anchor_is_c)
+    assert record is not None
+    reference_lookup = make_fake_lookup("CT", record.position)
+    with pytest.raises(ReferenceMismatchError) as excinfo:
+        validate_reference_allele(record, mutation, CONTEXT, reference_lookup)
+    assert "'CA'" in str(excinfo.value)
+    assert "'CT'" in str(excinfo.value)
+
+
+def test_build_records_raises_on_reference_mismatch_by_default() -> None:
+    mutations = [make_mutation(start_position=7577022, end_position=7577022)]
+    reference_lookup = make_fake_lookup("C", 7677022)
+    with pytest.raises(ReferenceMismatchError):
+        build_records(
+            mutations,
+            CONTEXT,
+            lift_position=add_offset,
+            anchor_base=None,
+            reference_lookup=reference_lookup,
+        )
+
+
+def test_build_records_skips_reference_mismatch_with_flag(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    mutations = [make_mutation(start_position=7577022, end_position=7577022)]
+    reference_lookup = make_fake_lookup("C", 7677022)
+    with caplog.at_level(logging.WARNING, logger="cellme"):
+        records, dropped = build_records(
+            mutations,
+            CONTEXT,
+            lift_position=add_offset,
+            anchor_base=None,
+            reference_lookup=reference_lookup,
+            skip_ref_mismatch=True,
+        )
+    assert records == []
+    assert dropped == 1
+    assert "TP53 R306*" in caplog.text
+
+
+def test_build_records_happy_path_with_matching_reference_is_unchanged() -> None:
+    mutations = [make_mutation(start_position=7577022, end_position=7577022)]
+    reference_lookup = make_fake_lookup("G", 7677022)
+    records, dropped = build_records(
+        mutations,
+        CONTEXT,
+        lift_position=add_offset,
+        anchor_base=None,
+        reference_lookup=reference_lookup,
+    )
+    assert dropped == 0
+    assert [record.reference_allele for record in records] == ["G"]
+
+
+def test_make_reference_lookup_reads_span_from_fasta(tmp_path: Path) -> None:
+    fasta = tmp_path / "ref.fa"
+    fasta.write_text(">17\nACGTACGTACGT\n")
+    pysam.faidx(str(fasta))
+    reference_lookup = make_reference_lookup(fasta)
+    assert reference_lookup is not None
+    assert reference_lookup("17", 1, 4) == "ACGT"
+    assert reference_lookup("17", 5, 5) == "A"
+    assert reference_lookup("unplaced", 1, 4) == ""
+    anchor_base = make_anchor_base(reference_lookup)
+    assert anchor_base is not None
+    assert anchor_base("17", 3) == "G"
+
+
+def test_make_reference_lookup_matches_chr_prefixed_contigs(tmp_path: Path) -> None:
+    fasta = tmp_path / "ref.fa"
+    fasta.write_text(">chr17\nACGTACGTACGT\n")
+    pysam.faidx(str(fasta))
+    reference_lookup = make_reference_lookup(fasta)
+    assert reference_lookup is not None
+    assert reference_lookup("17", 1, 4) == "ACGT"
+
+
+def test_make_reference_lookup_is_none_without_reference() -> None:
+    assert make_reference_lookup(None) is None
+    assert make_anchor_base(None) is None
 
 
 def test_header_declares_reference_contigs_and_full_info_schema() -> None:
