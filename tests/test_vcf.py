@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +9,7 @@ import pytest
 from cellme.builds import GenomeBuild
 from cellme.cbioportal import Mutation
 from cellme.vcf import INFO_FIELDS
+from cellme.vcf import LiftedCoordinate
 from cellme.vcf import LiftoverError
 from cellme.vcf import ReferenceLookup
 from cellme.vcf import ReferenceMismatchError
@@ -59,8 +61,24 @@ def make_mutation(**overrides: Any) -> Mutation:
     return Mutation(**defaults)
 
 
-def add_offset(_chromosome: str, position: int) -> int:
-    return position + 100000
+def add_offset(_chromosome: str, position: int) -> LiftedCoordinate:
+    return LiftedCoordinate(position=position + 100000, negative_strand=False)
+
+
+def minus_lifter(mirror: int) -> Callable[[str, int], LiftedCoordinate]:
+    """
+    Return a minus-strand lifter mapping source position ``p`` to ``mirror - p``.
+
+    A minus-strand chain block reverses coordinates, so consecutive source
+    positions map to consecutive decreasing target positions. Choosing ``mirror``
+    as ``source_position + target_position`` places a chosen source at a chosen
+    target while preserving that reversal for its neighbors.
+    """
+
+    def lift(_chromosome: str, position: int) -> LiftedCoordinate:
+        return LiftedCoordinate(position=mirror - position, negative_strand=True)
+
+    return lift
 
 
 def never_lifts(_chromosome: str, _position: int) -> None:
@@ -142,6 +160,107 @@ def test_insertion_left_anchors_with_placeholder() -> None:
     assert record.info["ANCHOR"] == "placeholder"
 
 
+def test_minus_strand_substitution_lifts_and_reverse_complements() -> None:
+    # AVPR1B R364C: hg19 chr1:206230957 C>T lifts to hg38 chr1:206110374 G>A (CrossMap oracle).
+    mutation = make_mutation(
+        gene="AVPR1B",
+        chromosome="1",
+        start_position=206230957,
+        end_position=206230957,
+        reference_allele="C",
+        variant_allele="T",
+        protein_change="R364C",
+        variant_class="Missense_Mutation",
+        variant_type="SNP",
+    )
+    mirror = 206230957 + 206110374
+    record = build_record(mutation, CONTEXT, lift_position=minus_lifter(mirror), anchor_base=None)
+    assert record is not None
+    assert record.position == 206110374
+    assert record.reference_allele == "G"
+    assert record.alternate_allele == "A"
+    assert record.info["LIFTED"] is True
+
+
+def test_minus_strand_substitution_passes_reference_validation() -> None:
+    # The reverse-complemented REF (G) must match the hg38 base at the lifted position.
+    mutation = make_mutation(
+        gene="AVPR1B",
+        chromosome="1",
+        start_position=206230957,
+        end_position=206230957,
+        reference_allele="C",
+        variant_allele="T",
+        protein_change="R364C",
+        variant_type="SNP",
+    )
+    mirror = 206230957 + 206110374
+    record = build_record(mutation, CONTEXT, lift_position=minus_lifter(mirror), anchor_base=None)
+    assert record is not None
+    reference_lookup = make_fake_lookup("G", 206110374)
+    validate_reference_allele(record, mutation, CONTEXT, reference_lookup)
+
+
+def test_minus_strand_deletion_left_anchors_and_reverse_complements() -> None:
+    # Deleting hg19 chr1:206230957 (C) lands at hg38 chr1:206110373 with REF=CG, ALT=C,
+    # matching the hg38 reference bases CG at chr1:206110373-206110374.
+    mutation = make_mutation(
+        gene="AVPR1B",
+        chromosome="1",
+        start_position=206230957,
+        end_position=206230957,
+        reference_allele="C",
+        variant_allele="-",
+        variant_class="Frame_Shift_Del",
+        variant_type="DEL",
+    )
+    mirror = 206230957 + 206110374
+
+    def anchor_is_reference_c(_chromosome: str, _position: int) -> str:
+        return "C"
+
+    record = build_record(
+        mutation, CONTEXT, lift_position=minus_lifter(mirror), anchor_base=anchor_is_reference_c
+    )
+    assert record is not None
+    assert record.position == 206110373
+    assert record.reference_allele == "CG"
+    assert record.alternate_allele == "C"
+    assert record.info["ANCHOR"] == "reference"
+    reference_lookup = make_fake_lookup("CG", 206110373)
+    validate_reference_allele(record, mutation, CONTEXT, reference_lookup)
+
+
+def test_minus_strand_insertion_left_anchors_and_reverse_complements() -> None:
+    # RBP3 insertion of G between hg19 chr10:48390168-48390169 lands at hg38 chr10:47349193
+    # with REF=G, ALT=GC (revcomp of the inserted G), matching the hg38 base G there.
+    mutation = make_mutation(
+        gene="RBP3",
+        chromosome="10",
+        start_position=48390168,
+        end_position=48390169,
+        reference_allele="-",
+        variant_allele="G",
+        variant_class="Frame_Shift_Ins",
+        variant_type="INS",
+    )
+    mirror = 48390168 + 47349194
+
+    def anchor_is_reference_g(_chromosome: str, _position: int) -> str:
+        return "G"
+
+    record = build_record(
+        mutation, CONTEXT, lift_position=minus_lifter(mirror), anchor_base=anchor_is_reference_g
+    )
+    assert record is not None
+    assert record.position == 47349193
+    assert record.reference_allele == "G"
+    assert record.alternate_allele == "GC"
+    assert record.info["ANCHOR"] == "reference"
+    reference_lookup = make_fake_lookup("G", 47349193)
+    validate_reference_allele(record, mutation, CONTEXT, reference_lookup)
+
+
 def test_unliftable_mutation_raises_and_names_the_variant() -> None:
     with pytest.raises(LiftoverError) as excinfo:
         build_record(make_mutation(), CONTEXT, lift_position=never_lifts, anchor_base=None)
@@ -170,14 +289,12 @@ def test_build_records_sorts_and_counts_drops() -> None:
         make_mutation(chromosome="unmappable", start_position=5),
     ]
 
-    def lift(chromosome: str, position: int) -> int | None:
+    def lift(chromosome: str, position: int) -> LiftedCoordinate | None:
         if chromosome == "unmappable":
             return None
-        return position
+        return LiftedCoordinate(position=position, negative_strand=False)
 
-    records, dropped = build_records(
-        mutations, CONTEXT, lift_position=lift, anchor_base=None, skip_liftover_fails=True
-    )
+    records, dropped = build_records(mutations, CONTEXT, lift_position=lift, anchor_base=None)
     assert dropped == 1
     assert [record.contig for record in records] == ["1", "17"]
 
@@ -220,13 +337,7 @@ def test_build_records_drops_unknown_contigs() -> None:
     assert [record.contig for record in records] == ["17"]
 
 
-def test_build_records_raises_on_liftover_failure_by_default() -> None:
-    mutations = [make_mutation(chromosome="1", start_position=1000)]
-    with pytest.raises(LiftoverError):
-        build_records(mutations, CONTEXT, lift_position=never_lifts, anchor_base=None)
-
-
-def test_build_records_skips_liftover_failure_with_flag(
+def test_build_records_drops_liftover_failure_by_default(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     mutations = [make_mutation()]
@@ -236,11 +347,22 @@ def test_build_records_skips_liftover_failure_with_flag(
             CONTEXT,
             lift_position=never_lifts,
             anchor_base=None,
-            skip_liftover_fails=True,
         )
     assert records == []
     assert dropped == 1
     assert "TP53 R306*" in caplog.text
+
+
+def test_build_records_raises_on_liftover_failure_with_flag() -> None:
+    mutations = [make_mutation(chromosome="1", start_position=1000)]
+    with pytest.raises(LiftoverError):
+        build_records(
+            mutations,
+            CONTEXT,
+            lift_position=never_lifts,
+            anchor_base=None,
+            raise_on_liftover_fails=True,
+        )
 
 
 def make_fake_lookup(sequence: str, start: int) -> ReferenceLookup:
