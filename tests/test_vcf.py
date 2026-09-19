@@ -579,6 +579,19 @@ def test_header_uses_reference_sequence_dictionary_when_provided(tmp_path: Path)
     assert "##reference=ref.fa" in header_text
 
 
+def test_header_emits_reference_checksum_from_sibling_md5(tmp_path: Path) -> None:
+    fasta_path = _write_primary_fasta(tmp_path)
+    (tmp_path / "ref.fa.md5").write_text("abc123def456  ref.fa\n")
+    header_text = str(build_header(CONTEXT, "0.1.0", reference=fasta_path))
+    assert "##reference_checksum=abc123def456" in header_text
+
+
+def test_header_omits_reference_checksum_when_no_sibling(tmp_path: Path) -> None:
+    fasta_path = _write_primary_fasta(tmp_path)
+    header_text = str(build_header(CONTEXT, "0.1.0", reference=fasta_path))
+    assert "##reference_checksum" not in header_text
+
+
 def test_header_reference_raises_when_fewer_than_25_contigs(tmp_path: Path) -> None:
     fasta_path = tmp_path / "ref.fa"
     fasta_path.write_text(">chr1\nACGT\n>chrExtra\nGG\n")

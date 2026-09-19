@@ -716,6 +716,34 @@ def make_reference_contig_map(reference: Path) -> dict[str, str]:
     return mapping
 
 
+_CHECKSUM_SUFFIXES: tuple[str, ...] = (".md5", ".sha256")
+"""Sibling checksum file suffixes to look for next to the reference FASTA."""
+
+
+def _read_sibling_checksum(reference: Path) -> str | None:
+    """
+    Read a sibling checksum file for the reference FASTA, if one exists.
+
+    Looks for ``<reference>.md5`` and ``<reference>.sha256`` (in that order).
+    The first line of the file is read and the first whitespace-delimited token
+    is returned as the checksum value (handles both bare-hash and
+    ``hash  filename`` formats).
+
+    Args:
+        reference: Path to the reference FASTA.
+
+    Returns:
+        The checksum string, or None if no sibling checksum file exists.
+    """
+    for suffix in _CHECKSUM_SUFFIXES:
+        checksum_path = reference.parent / (reference.name + suffix)
+        if checksum_path.is_file():
+            text = checksum_path.read_text().strip()
+            if text:
+                return text.split()[0]
+    return None
+
+
 def build_header(
     context: TrackContext,
     version: str,
@@ -730,6 +758,9 @@ def build_header(
     ``##contig`` lines, emitted in FASTA order. The first 25 contigs must be
     the primary-assembly chromosomes (1-22, X, Y, MT) in karyotype order,
     matched by alias; a mismatch raises :class:`ReferenceContigError`.
+
+    If a sibling checksum file exists (``<reference>.md5`` or
+    ``<reference>.sha256``), a ``##reference_checksum`` header line is emitted.
 
     Without a reference, cellme's built-in contig tables are used.
 
@@ -758,6 +789,9 @@ def build_header(
     header.add_line(f"##source=cellme {version}")
     if reference is not None:
         header.add_line(f"##reference={reference.name}")
+        checksum = _read_sibling_checksum(reference)
+        if checksum is not None:
+            header.add_line(f"##reference_checksum={checksum}")
     else:
         header.add_line(f"##reference={context.target_build.grch_name}")
     header.add_line(f"##cellme_cellLine={context.cell_line}")
