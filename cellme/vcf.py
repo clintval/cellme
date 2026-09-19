@@ -643,14 +643,126 @@ def build_records(
     return records, dropped
 
 
+_PRIMARY_ASSEMBLY_NAMES: tuple[str, ...] = tuple(
+    name for name, _length in contigs_for(GenomeBuild.hg38)
+)
+"""The 25 primary-assembly contig names in karyotype order (Ensembl style)."""
+
+
+class ReferenceContigError(ValueError):
+    """Raised when a reference FASTA's primary-assembly contigs are missing or misordered."""
+
+
+def _validate_reference_contigs(fasta: "pysam.FastaFile") -> dict[str, str]:
+    """
+    Validate that a reference FASTA's first 25 contigs are the primary assembly.
+
+    The first 25 contigs must match the 25 primary-assembly chromosomes
+    (1-22, X, Y, MT) in karyotype order, each under a recognized alias.
+
+    Args:
+        fasta: An open pysam FASTA file.
+
+    Returns:
+        A mapping from internal Ensembl names to the FASTA's contig names.
+
+    Raises:
+        ReferenceContigError: When the FASTA has fewer than 25 contigs, or when
+            any of the first 25 do not match the expected primary-assembly
+            contig in karyotype order.
+    """
+    fasta_contigs = list(fasta.references)
+    n_primary = len(_PRIMARY_ASSEMBLY_NAMES)
+    if len(fasta_contigs) < n_primary:
+        raise ReferenceContigError(
+            f"Reference FASTA has {len(fasta_contigs)} contigs, "
+            f"but {n_primary} primary-assembly contigs are required."
+        )
+
+    mapping: dict[str, str] = {}
+    for i, expected_name in enumerate(_PRIMARY_ASSEMBLY_NAMES):
+        actual_name = fasta_contigs[i]
+        aliases = _reference_contig_aliases(expected_name)
+        if actual_name not in aliases:
+            raise ReferenceContigError(
+                f"Expected primary-assembly contig {expected_name!r} at position {i} "
+                f"(aliases: {', '.join(aliases)}), but found {actual_name!r}."
+            )
+        mapping[expected_name] = actual_name
+
+    return mapping
+
+
+def make_reference_contig_map(reference: Path) -> dict[str, str]:
+    """
+    Map internal Ensembl contig names to matching names in a reference FASTA.
+
+    All 25 primary-assembly contigs must be present and in karyotype order.
+
+    Args:
+        reference: Path to an indexed reference FASTA.
+
+    Returns:
+        A mapping from internal names (``1``..``22``, ``X``, ``Y``, ``MT``) to
+        the contig name the FASTA uses for that chromosome.
+
+    Raises:
+        ReferenceContigError: When a primary-assembly contig is missing or
+            misordered.
+    """
+    fasta = pysam.FastaFile(str(reference))
+    mapping = _validate_reference_contigs(fasta)
+    fasta.close()
+    return mapping
+
+
+_CHECKSUM_SUFFIXES: tuple[str, ...] = (".md5", ".sha256")
+"""Sibling checksum file suffixes to look for next to the reference FASTA."""
+
+
+def _read_sibling_checksum(reference: Path) -> str | None:
+    """
+    Read a sibling checksum file for the reference FASTA, if one exists.
+
+    Looks for ``<reference>.md5`` and ``<reference>.sha256`` (in that order).
+    The first line of the file is read and the first whitespace-delimited token
+    is returned as the checksum value (handles both bare-hash and
+    ``hash  filename`` formats).
+
+    Args:
+        reference: Path to the reference FASTA.
+
+    Returns:
+        The checksum string, or None if no sibling checksum file exists.
+    """
+    for suffix in _CHECKSUM_SUFFIXES:
+        checksum_path = reference.parent / (reference.name + suffix)
+        if checksum_path.is_file():
+            first_line = checksum_path.read_text().splitlines()[0].strip()
+            if first_line:
+                return first_line.split()[0]
+    return None
+
+
 def build_header(
     context: TrackContext,
     version: str,
     *,
     contig_style: ContigStyle = ContigStyle.ucsc,
+    reference: Path | None = None,
 ) -> "pysam.VariantHeader":
     """
     Build a VCF header for the target build with the full INFO schema.
+
+    When a reference FASTA is supplied, its sequence dictionary provides the
+    ``##contig`` lines, emitted in FASTA order. The first 25 contigs must be
+    the primary-assembly chromosomes (1-22, X, Y, MT) in karyotype order,
+    matched by alias; a mismatch raises :class:`ReferenceContigError`.
+
+    If a sibling checksum file exists (``<reference>.md5`` or
+    ``<reference>.sha256``), a ``##reference_checksum`` header line is emitted.
+
+    Without a reference, cellme's built-in contig tables are used.
 
     Args:
         context: The shared per-run context.
@@ -658,24 +770,43 @@ def build_header(
         contig_style: The naming convention for the ``##contig`` lines. UCSC
             chr-prefixed names are the default; ``ensembl`` writes the unprefixed
             names. This must match the style passed to :func:`write_vcf`, so that
-            each record's CHROM names a contig declared in the header.
+            each record's CHROM names a contig declared in the header. Ignored
+            when ``reference`` is supplied, since the FASTA's own contig names
+            are used verbatim.
+        reference: Path to the target-build reference FASTA. When supplied, its
+            ``.fai`` index is read and its contig names and lengths are emitted
+            as the ``##contig`` lines, and the ``##reference`` meta-line records
+            the FASTA path.
 
     Returns:
         A pysam variant header populated with meta, contig, and INFO lines.
+
+    Raises:
+        ReferenceContigError: When ``reference`` is supplied but its primary
+            contigs are missing or not in karyotype order.
     """
     header = pysam.VariantHeader()
     header.add_line(f"##source=cellme {version}")
-    header.add_line(f"##reference={context.target_build.grch_name}")
+    if reference is not None:
+        header.add_line(f"##reference={reference.name}")
+        checksum = _read_sibling_checksum(reference)
+        if checksum is not None:
+            header.add_line(f"##reference_checksum={checksum}")
+    else:
+        header.add_line(f"##reference={context.target_build.grch_name}")
     header.add_line(f"##cellme_cellLine={context.cell_line}")
     header.add_line(f"##cellme_sampleId={context.sample_id}")
     header.add_line(f"##cellme_sourceStudy=cBioPortal CCLE {context.study}")
     header.add_line(f"##cellme_sourceBuild={context.source_build.grch_name}")
-    # The lengths come from cellme's rCRS-based contig tables. Under UCSC naming
-    # the mitochondrion is emitted as chrM at its rCRS length (16569); on hg19
-    # that length matches GRCh37/rCRS rather than UCSC-hg19's older chrM (16571).
-    # See cellme.builds.styled_contig for the full rationale.
-    for name, length in contigs_for(context.target_build):
-        header.add_line(f"##contig=<ID={styled_contig(name, contig_style)},length={length}>")
+    if reference is not None:
+        fasta = pysam.FastaFile(str(reference))
+        _validate_reference_contigs(fasta)
+        for name, length in zip(fasta.references, fasta.lengths, strict=True):
+            header.add_line(f"##contig=<ID={name},length={length}>")
+        fasta.close()
+    else:
+        for name, length in contigs_for(context.target_build):
+            header.add_line(f"##contig=<ID={styled_contig(name, contig_style)},length={length}>")
     for field in INFO_FIELDS:
         header.add_line(
             f"##INFO=<ID={field.key},Number={field.number},"
@@ -688,27 +819,37 @@ def _to_pysam_record(
     header: "pysam.VariantHeader",
     record: VcfRecord,
     contig_style: ContigStyle,
+    contig_map: dict[str, str] | None = None,
 ) -> "pysam.VariantRecord":
     """
     Materialize a VcfRecord as a pysam record bound to a header.
 
     The record's contig is held internally in Ensembl style and is rendered into
     ``contig_style`` here, so the CHROM written names the same contig the header
-    declared under that style.
+    declared under that style. When a ``contig_map`` is supplied (from a
+    reference FASTA), it is used instead so the emitted CHROM matches the
+    reference's sequence dictionary.
 
     Args:
         header: The header the record will be written under.
         record: The record to materialize.
         contig_style: The naming convention for the emitted CHROM. It must match
-            the style the header was built with.
+            the style the header was built with. Ignored when ``contig_map`` is
+            supplied.
+        contig_map: A mapping from internal Ensembl contig names to the names
+            used in the reference FASTA, or None to use ``contig_style``.
 
     Returns:
         A pysam variant record ready to be written.
     """
+    if contig_map is not None:
+        chrom = contig_map.get(record.contig, styled_contig(record.contig, contig_style))
+    else:
+        chrom = styled_contig(record.contig, contig_style)
     start = record.position - 1
     stop = start + len(record.reference_allele)
     return header.new_record(
-        contig=styled_contig(record.contig, contig_style),
+        contig=chrom,
         start=start,
         stop=stop,
         alleles=(record.reference_allele, record.alternate_allele),
@@ -723,6 +864,7 @@ def write_vcf(
     output: Path | None,
     *,
     contig_style: ContigStyle = ContigStyle.ucsc,
+    contig_map: dict[str, str] | None = None,
 ) -> None:
     """
     Write records to a VCF at a path, or to standard output when no path given.
@@ -737,14 +879,26 @@ def write_vcf(
         header: The header to write them under.
         output: The destination path, or None to write to standard output.
         contig_style: The naming convention for each record's CHROM. It must match
-            the style ``header`` was built with; both default to UCSC.
+            the style ``header`` was built with; both default to UCSC. Ignored
+            when ``contig_map`` is supplied.
+        contig_map: A mapping from internal Ensembl contig names to the names
+            used in the reference FASTA, or None to use ``contig_style``.
     """
     if output is None:
-        _write_records("-", header, records, compressed=False, contig_style=contig_style)
+        _write_records(
+            "-", header, records, compressed=False, contig_style=contig_style, contig_map=contig_map
+        )
         return
     destination = str(output)
     compressed = destination.endswith(".gz")
-    _write_records(destination, header, records, compressed=compressed, contig_style=contig_style)
+    _write_records(
+        destination,
+        header,
+        records,
+        compressed=compressed,
+        contig_style=contig_style,
+        contig_map=contig_map,
+    )
     if compressed:
         pysam.tabix_index(destination, preset="vcf", force=True)
 
@@ -756,6 +910,7 @@ def _write_records(
     *,
     compressed: bool,
     contig_style: ContigStyle,
+    contig_map: dict[str, str] | None = None,
 ) -> None:
     """
     Write records to a destination, BGZF-compressed when ``compressed`` is set.
@@ -766,12 +921,14 @@ def _write_records(
         records: The records to write, already in sorted order.
         compressed: Whether to write a block-gzip compressed VCF.
         contig_style: The naming convention for each record's CHROM, matching the
-            header.
+            header. Ignored when ``contig_map`` is supplied.
+        contig_map: A mapping from internal Ensembl contig names to the names
+            used in the reference FASTA, or None to use ``contig_style``.
     """
     mode = "wz" if compressed else "w"
     with pysam.VariantFile(destination, mode, header=header) as out:
         for record in records:
-            out.write(_to_pysam_record(header, record, contig_style))
+            out.write(_to_pysam_record(header, record, contig_style, contig_map=contig_map))
 
 
 def make_lifter(source: GenomeBuild, target: GenomeBuild) -> LiftPosition | None:
