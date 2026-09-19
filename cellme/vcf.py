@@ -643,27 +643,86 @@ def build_records(
     return records, dropped
 
 
+_PRIMARY_ASSEMBLY_NAMES: tuple[str, ...] = tuple(
+    name for name, _length in contigs_for(GenomeBuild.hg38)
+)
+"""The 25 primary-assembly contig names in karyotype order (Ensembl style)."""
+
+
+class ReferenceContigError(ValueError):
+    """Raised when a reference FASTA's primary-assembly contigs are missing or misordered."""
+
+
+def _resolve_primary_contigs(
+    fasta: "pysam.FastaFile",
+) -> tuple[dict[str, str], dict[str, int], set[str]]:
+    """
+    Resolve primary-assembly contigs in a reference FASTA and validate their order.
+
+    Every primary-assembly contig (1-22, X, Y, MT) must be present under a
+    recognized alias, and the primary contigs must appear in karyotype order
+    among the FASTA's contigs (non-primary contigs may be interleaved).
+
+    Args:
+        fasta: An open pysam FASTA file.
+
+    Returns:
+        A tuple of: (1) a mapping from internal Ensembl names to the FASTA's
+        contig names, (2) a mapping from FASTA contig names to their lengths,
+        and (3) the set of FASTA contig names that are primary-assembly.
+
+    Raises:
+        ReferenceContigError: When a primary-assembly contig is missing or when
+            the primary contigs appear out of karyotype order.
+    """
+    fasta_contigs = list(fasta.references)
+    fasta_lengths = dict(zip(fasta.references, fasta.lengths, strict=True))
+    fasta_set = set(fasta_contigs)
+
+    mapping: dict[str, str] = {}
+    for name in _PRIMARY_ASSEMBLY_NAMES:
+        matched = False
+        for alias in _reference_contig_aliases(name):
+            if alias in fasta_set:
+                mapping[name] = alias
+                matched = True
+                break
+        if not matched:
+            raise ReferenceContigError(
+                f"Primary-assembly contig {name!r} not found in reference FASTA. "
+                f"Tried aliases: {', '.join(_reference_contig_aliases(name))}."
+            )
+
+    primary_fasta_names = [mapping[name] for name in _PRIMARY_ASSEMBLY_NAMES]
+    primary_positions = [fasta_contigs.index(name) for name in primary_fasta_names]
+    if primary_positions != sorted(primary_positions):
+        raise ReferenceContigError(
+            "Primary-assembly contigs in the reference FASTA are not in karyotype order."
+        )
+
+    return mapping, fasta_lengths, set(primary_fasta_names)
+
+
 def make_reference_contig_map(reference: Path) -> dict[str, str]:
     """
     Map internal Ensembl contig names to matching names in a reference FASTA.
+
+    All 25 primary-assembly contigs must be present and in karyotype order.
 
     Args:
         reference: Path to an indexed reference FASTA.
 
     Returns:
         A mapping from internal names (``1``..``22``, ``X``, ``Y``, ``MT``) to
-        the contig name the FASTA uses for that chromosome, for every internal
-        name that has a match. Unmatched names are omitted.
+        the contig name the FASTA uses for that chromosome.
+
+    Raises:
+        ReferenceContigError: When a primary-assembly contig is missing or
+            misordered.
     """
     fasta = pysam.FastaFile(str(reference))
-    fasta_contigs = set(fasta.references)
+    mapping, _lengths, _primary = _resolve_primary_contigs(fasta)
     fasta.close()
-    mapping: dict[str, str] = {}
-    for name, _length in contigs_for(GenomeBuild.hg38):
-        for alias in _reference_contig_aliases(name):
-            if alias in fasta_contigs:
-                mapping[name] = alias
-                break
     return mapping
 
 
@@ -678,8 +737,13 @@ def build_header(
     Build a VCF header for the target build with the full INFO schema.
 
     When a reference FASTA is supplied, its sequence dictionary provides the
-    ``##contig`` lines so the VCF header matches the reference the downstream
-    pipeline uses. Without one, cellme's built-in contig tables are used.
+    ``##contig`` lines. The 25 primary-assembly contigs are emitted first in
+    karyotype order (using the FASTA's own names and lengths), followed by any
+    additional contigs (alts, decoys, etc.) in their FASTA order. All primary
+    contigs must be present and in karyotype order in the FASTA; a missing or
+    misordered primary contig raises :class:`ReferenceContigError`.
+
+    Without a reference, cellme's built-in contig tables are used.
 
     Args:
         context: The shared per-run context.
@@ -697,6 +761,10 @@ def build_header(
 
     Returns:
         A pysam variant header populated with meta, contig, and INFO lines.
+
+    Raises:
+        ReferenceContigError: When ``reference`` is supplied but its primary
+            contigs are missing or not in karyotype order.
     """
     header = pysam.VariantHeader()
     header.add_line(f"##source=cellme {version}")
@@ -710,8 +778,13 @@ def build_header(
     header.add_line(f"##cellme_sourceBuild={context.source_build.grch_name}")
     if reference is not None:
         fasta = pysam.FastaFile(str(reference))
-        for name, length in zip(fasta.references, fasta.lengths, strict=True):
-            header.add_line(f"##contig=<ID={name},length={length}>")
+        mapping, fasta_lengths, primary_set = _resolve_primary_contigs(fasta)
+        primary_fasta_names = [mapping[name] for name in _PRIMARY_ASSEMBLY_NAMES]
+        for name in primary_fasta_names:
+            header.add_line(f"##contig=<ID={name},length={fasta_lengths[name]}>")
+        for name in fasta.references:
+            if name not in primary_set:
+                header.add_line(f"##contig=<ID={name},length={fasta_lengths[name]}>")
         fasta.close()
     else:
         for name, length in contigs_for(context.target_build):

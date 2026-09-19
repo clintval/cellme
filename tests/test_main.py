@@ -36,9 +36,14 @@ def _snv_on_contig_17(reference_allele: str) -> Mutation:
 
 
 def _write_reference(tmp_path: Path) -> Path:
-    """Write and index a tiny FASTA whose contig 17 has base 'A' at 1-based position 5."""
+    """Write and index a tiny FASTA with all 25 primary contigs in karyotype order."""
+    lines = []
+    for i in list(range(1, 23)) + ["X", "Y"]:
+        seq = "ACGTACGTACGT" if str(i) == "17" else "ACGT"
+        lines.append(f">{i}\n{seq}\n")
+    lines.append(">MT\nACGT\n")
     fasta = tmp_path / "ref.fa"
-    fasta.write_text(">17\nACGTACGTACGT\n")
+    fasta.write_text("".join(lines))
     pysam.faidx(str(fasta))
     return fasta
 

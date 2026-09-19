@@ -552,19 +552,53 @@ def test_ensembl_contig_style_header_is_unprefixed() -> None:
     assert "chrM" not in header_text
 
 
-def test_header_uses_reference_sequence_dictionary_when_provided(tmp_path: Path) -> None:
+def _write_primary_fasta(tmp_path: Path, *, style: str = "ucsc") -> Path:
+    """Write a minimal FASTA with all 25 primary contigs plus one extra."""
+    prefix = "chr" if style == "ucsc" else ""
+    mt = "chrM" if style == "ucsc" else "MT"
+    lines = []
+    for i in list(range(1, 23)) + ["X", "Y"]:
+        lines.append(f">{prefix}{i}\nACGT\n")
+    lines.append(f">{mt}\nACGT\n")
+    lines.append(">chrExtra\nGGCC\n")
     fasta_path = tmp_path / "ref.fa"
-    fasta_path.write_text(">chr17\nACGT\n>chrExtra\nGGCC\n")
+    fasta_path.write_text("".join(lines))
     pysam.faidx(str(fasta_path))
+    return fasta_path
+
+
+def test_header_uses_reference_sequence_dictionary_when_provided(tmp_path: Path) -> None:
+    fasta_path = _write_primary_fasta(tmp_path)
     header_text = str(build_header(CONTEXT, "0.1.0", reference=fasta_path))
-    assert "##contig=<ID=chr17,length=4>" in header_text
-    assert "##contig=<ID=chrExtra,length=4>" in header_text
-    assert f"##reference={fasta_path}" in header_text
-    assert "##contig=<ID=chr1," not in header_text
     contig_lines = [line for line in header_text.splitlines() if line.startswith("##contig")]
-    assert contig_lines[0] == "##contig=<ID=chr17,length=4>"
-    assert contig_lines[1] == "##contig=<ID=chrExtra,length=4>"
-    assert len(contig_lines) == 2
+    assert contig_lines[0] == "##contig=<ID=chr1,length=4>"
+    assert contig_lines[16] == "##contig=<ID=chr17,length=4>"
+    assert contig_lines[24] == "##contig=<ID=chrM,length=4>"
+    assert contig_lines[25] == "##contig=<ID=chrExtra,length=4>"
+    assert len(contig_lines) == 26
+    assert f"##reference={fasta_path}" in header_text
+
+
+def test_header_reference_raises_on_missing_primary_contig(tmp_path: Path) -> None:
+    fasta_path = tmp_path / "ref.fa"
+    fasta_path.write_text(">chr1\nACGT\n")
+    pysam.faidx(str(fasta_path))
+    from cellme.vcf import ReferenceContigError
+    with pytest.raises(ReferenceContigError, match="not found in reference"):
+        build_header(CONTEXT, "0.1.0", reference=fasta_path)
+
+
+def test_header_reference_raises_on_misordered_primary_contigs(tmp_path: Path) -> None:
+    lines = []
+    for i in [2, 1] + list(range(3, 23)) + ["X", "Y"]:
+        lines.append(f">chr{i}\nACGT\n")
+    lines.append(">chrM\nACGT\n")
+    fasta_path = tmp_path / "ref.fa"
+    fasta_path.write_text("".join(lines))
+    pysam.faidx(str(fasta_path))
+    from cellme.vcf import ReferenceContigError
+    with pytest.raises(ReferenceContigError, match="not in karyotype order"):
+        build_header(CONTEXT, "0.1.0", reference=fasta_path)
 
 
 def test_written_record_chrom_is_chr_prefixed_by_default(tmp_path: Path) -> None:
