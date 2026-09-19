@@ -738,9 +738,9 @@ def _read_sibling_checksum(reference: Path) -> str | None:
     for suffix in _CHECKSUM_SUFFIXES:
         checksum_path = reference.parent / (reference.name + suffix)
         if checksum_path.is_file():
-            text = checksum_path.read_text().strip()
-            if text:
-                return text.split()[0]
+            first_line = checksum_path.read_text().splitlines()[0].strip()
+            if first_line:
+                return first_line.split()[0]
     return None
 
 
