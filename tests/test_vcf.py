@@ -576,7 +576,7 @@ def test_header_uses_reference_sequence_dictionary_when_provided(tmp_path: Path)
     assert contig_lines[24] == "##contig=<ID=chrM,length=4>"
     assert contig_lines[25] == "##contig=<ID=chrExtra,length=4>"
     assert len(contig_lines) == 26
-    assert f"##reference={fasta_path}" in header_text
+    assert "##reference=ref.fa" in header_text
 
 
 def test_header_reference_raises_when_fewer_than_25_contigs(tmp_path: Path) -> None:

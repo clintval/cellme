@@ -757,7 +757,7 @@ def build_header(
     header = pysam.VariantHeader()
     header.add_line(f"##source=cellme {version}")
     if reference is not None:
-        header.add_line(f"##reference={reference}")
+        header.add_line(f"##reference={reference.name}")
     else:
         header.add_line(f"##reference={context.target_build.grch_name}")
     header.add_line(f"##cellme_cellLine={context.cell_line}")
