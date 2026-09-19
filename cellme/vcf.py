@@ -643,14 +643,43 @@ def build_records(
     return records, dropped
 
 
+def make_reference_contig_map(reference: Path) -> dict[str, str]:
+    """
+    Map internal Ensembl contig names to matching names in a reference FASTA.
+
+    Args:
+        reference: Path to an indexed reference FASTA.
+
+    Returns:
+        A mapping from internal names (``1``..``22``, ``X``, ``Y``, ``MT``) to
+        the contig name the FASTA uses for that chromosome, for every internal
+        name that has a match. Unmatched names are omitted.
+    """
+    fasta = pysam.FastaFile(str(reference))
+    fasta_contigs = set(fasta.references)
+    fasta.close()
+    mapping: dict[str, str] = {}
+    for name, _length in contigs_for(GenomeBuild.hg38):
+        for alias in _reference_contig_aliases(name):
+            if alias in fasta_contigs:
+                mapping[name] = alias
+                break
+    return mapping
+
+
 def build_header(
     context: TrackContext,
     version: str,
     *,
     contig_style: ContigStyle = ContigStyle.ucsc,
+    reference: Path | None = None,
 ) -> "pysam.VariantHeader":
     """
     Build a VCF header for the target build with the full INFO schema.
+
+    When a reference FASTA is supplied, its sequence dictionary provides the
+    ``##contig`` lines so the VCF header matches the reference the downstream
+    pipeline uses. Without one, cellme's built-in contig tables are used.
 
     Args:
         context: The shared per-run context.
@@ -658,24 +687,35 @@ def build_header(
         contig_style: The naming convention for the ``##contig`` lines. UCSC
             chr-prefixed names are the default; ``ensembl`` writes the unprefixed
             names. This must match the style passed to :func:`write_vcf`, so that
-            each record's CHROM names a contig declared in the header.
+            each record's CHROM names a contig declared in the header. Ignored
+            when ``reference`` is supplied, since the FASTA's own contig names
+            are used verbatim.
+        reference: Path to the target-build reference FASTA. When supplied, its
+            ``.fai`` index is read and its contig names and lengths are emitted
+            as the ``##contig`` lines, and the ``##reference`` meta-line records
+            the FASTA path.
 
     Returns:
         A pysam variant header populated with meta, contig, and INFO lines.
     """
     header = pysam.VariantHeader()
     header.add_line(f"##source=cellme {version}")
-    header.add_line(f"##reference={context.target_build.grch_name}")
+    if reference is not None:
+        header.add_line(f"##reference={reference}")
+    else:
+        header.add_line(f"##reference={context.target_build.grch_name}")
     header.add_line(f"##cellme_cellLine={context.cell_line}")
     header.add_line(f"##cellme_sampleId={context.sample_id}")
     header.add_line(f"##cellme_sourceStudy=cBioPortal CCLE {context.study}")
     header.add_line(f"##cellme_sourceBuild={context.source_build.grch_name}")
-    # The lengths come from cellme's rCRS-based contig tables. Under UCSC naming
-    # the mitochondrion is emitted as chrM at its rCRS length (16569); on hg19
-    # that length matches GRCh37/rCRS rather than UCSC-hg19's older chrM (16571).
-    # See cellme.builds.styled_contig for the full rationale.
-    for name, length in contigs_for(context.target_build):
-        header.add_line(f"##contig=<ID={styled_contig(name, contig_style)},length={length}>")
+    if reference is not None:
+        fasta = pysam.FastaFile(str(reference))
+        for name, length in zip(fasta.references, fasta.lengths, strict=True):
+            header.add_line(f"##contig=<ID={name},length={length}>")
+        fasta.close()
+    else:
+        for name, length in contigs_for(context.target_build):
+            header.add_line(f"##contig=<ID={styled_contig(name, contig_style)},length={length}>")
     for field in INFO_FIELDS:
         header.add_line(
             f"##INFO=<ID={field.key},Number={field.number},"
@@ -688,27 +728,37 @@ def _to_pysam_record(
     header: "pysam.VariantHeader",
     record: VcfRecord,
     contig_style: ContigStyle,
+    contig_map: dict[str, str] | None = None,
 ) -> "pysam.VariantRecord":
     """
     Materialize a VcfRecord as a pysam record bound to a header.
 
     The record's contig is held internally in Ensembl style and is rendered into
     ``contig_style`` here, so the CHROM written names the same contig the header
-    declared under that style.
+    declared under that style. When a ``contig_map`` is supplied (from a
+    reference FASTA), it is used instead so the emitted CHROM matches the
+    reference's sequence dictionary.
 
     Args:
         header: The header the record will be written under.
         record: The record to materialize.
         contig_style: The naming convention for the emitted CHROM. It must match
-            the style the header was built with.
+            the style the header was built with. Ignored when ``contig_map`` is
+            supplied.
+        contig_map: A mapping from internal Ensembl contig names to the names
+            used in the reference FASTA, or None to use ``contig_style``.
 
     Returns:
         A pysam variant record ready to be written.
     """
+    if contig_map is not None:
+        chrom = contig_map.get(record.contig, styled_contig(record.contig, contig_style))
+    else:
+        chrom = styled_contig(record.contig, contig_style)
     start = record.position - 1
     stop = start + len(record.reference_allele)
     return header.new_record(
-        contig=styled_contig(record.contig, contig_style),
+        contig=chrom,
         start=start,
         stop=stop,
         alleles=(record.reference_allele, record.alternate_allele),
@@ -723,6 +773,7 @@ def write_vcf(
     output: Path | None,
     *,
     contig_style: ContigStyle = ContigStyle.ucsc,
+    contig_map: dict[str, str] | None = None,
 ) -> None:
     """
     Write records to a VCF at a path, or to standard output when no path given.
@@ -737,14 +788,26 @@ def write_vcf(
         header: The header to write them under.
         output: The destination path, or None to write to standard output.
         contig_style: The naming convention for each record's CHROM. It must match
-            the style ``header`` was built with; both default to UCSC.
+            the style ``header`` was built with; both default to UCSC. Ignored
+            when ``contig_map`` is supplied.
+        contig_map: A mapping from internal Ensembl contig names to the names
+            used in the reference FASTA, or None to use ``contig_style``.
     """
     if output is None:
-        _write_records("-", header, records, compressed=False, contig_style=contig_style)
+        _write_records(
+            "-", header, records, compressed=False, contig_style=contig_style, contig_map=contig_map
+        )
         return
     destination = str(output)
     compressed = destination.endswith(".gz")
-    _write_records(destination, header, records, compressed=compressed, contig_style=contig_style)
+    _write_records(
+        destination,
+        header,
+        records,
+        compressed=compressed,
+        contig_style=contig_style,
+        contig_map=contig_map,
+    )
     if compressed:
         pysam.tabix_index(destination, preset="vcf", force=True)
 
@@ -756,6 +819,7 @@ def _write_records(
     *,
     compressed: bool,
     contig_style: ContigStyle,
+    contig_map: dict[str, str] | None = None,
 ) -> None:
     """
     Write records to a destination, BGZF-compressed when ``compressed`` is set.
@@ -766,12 +830,14 @@ def _write_records(
         records: The records to write, already in sorted order.
         compressed: Whether to write a block-gzip compressed VCF.
         contig_style: The naming convention for each record's CHROM, matching the
-            header.
+            header. Ignored when ``contig_map`` is supplied.
+        contig_map: A mapping from internal Ensembl contig names to the names
+            used in the reference FASTA, or None to use ``contig_style``.
     """
     mode = "wz" if compressed else "w"
     with pysam.VariantFile(destination, mode, header=header) as out:
         for record in records:
-            out.write(_to_pysam_record(header, record, contig_style))
+            out.write(_to_pysam_record(header, record, contig_style, contig_map=contig_map))
 
 
 def make_lifter(source: GenomeBuild, target: GenomeBuild) -> LiftPosition | None:

@@ -18,6 +18,7 @@ from cellme.vcf import build_header
 from cellme.vcf import build_records
 from cellme.vcf import make_anchor_base
 from cellme.vcf import make_lifter
+from cellme.vcf import make_reference_contig_map
 from cellme.vcf import make_reference_lookup
 from cellme.vcf import write_vcf
 
@@ -113,6 +114,7 @@ def truth_track(
     )
     if dropped:
         logger.warning(f"Dropped {dropped} of {len(mutations)} mutations while building {build}")
-    header = build_header(context, __version__, contig_style=contig_style)
-    write_vcf(records, header, output, contig_style=contig_style)
+    contig_map = make_reference_contig_map(reference) if reference is not None else None
+    header = build_header(context, __version__, contig_style=contig_style, reference=reference)
+    write_vcf(records, header, output, contig_style=contig_style, contig_map=contig_map)
     logger.info(f"Wrote {len(records)} records for {context.cell_line} on {build}")

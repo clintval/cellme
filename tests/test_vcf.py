@@ -552,6 +552,21 @@ def test_ensembl_contig_style_header_is_unprefixed() -> None:
     assert "chrM" not in header_text
 
 
+def test_header_uses_reference_sequence_dictionary_when_provided(tmp_path: Path) -> None:
+    fasta_path = tmp_path / "ref.fa"
+    fasta_path.write_text(">chr17\nACGT\n>chrExtra\nGGCC\n")
+    pysam.faidx(str(fasta_path))
+    header_text = str(build_header(CONTEXT, "0.1.0", reference=fasta_path))
+    assert "##contig=<ID=chr17,length=4>" in header_text
+    assert "##contig=<ID=chrExtra,length=4>" in header_text
+    assert f"##reference={fasta_path}" in header_text
+    assert "##contig=<ID=chr1," not in header_text
+    contig_lines = [line for line in header_text.splitlines() if line.startswith("##contig")]
+    assert contig_lines[0] == "##contig=<ID=chr17,length=4>"
+    assert contig_lines[1] == "##contig=<ID=chrExtra,length=4>"
+    assert len(contig_lines) == 2
+
+
 def test_written_record_chrom_is_chr_prefixed_by_default(tmp_path: Path) -> None:
     records, _dropped = build_records(
         [make_mutation()], SAME_BUILD_CONTEXT, lift_position=None, anchor_base=None

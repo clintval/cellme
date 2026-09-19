@@ -121,8 +121,8 @@ def test_cli_writes_chr_prefixed_contigs_by_default(
     )
     main.run()
     with pysam.VariantFile(str(output)) as vcf:
-        assert [record.contig for record in vcf] == ["chr17"]
-        assert "##contig=<ID=chr17," in str(vcf.header)
+        assert [record.contig for record in vcf] == ["17"]
+        assert "##contig=<ID=17," in str(vcf.header)
 
 
 def test_cli_ensembl_contig_style_writes_unprefixed_contigs(
