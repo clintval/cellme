@@ -579,12 +579,25 @@ def test_header_uses_reference_sequence_dictionary_when_provided(tmp_path: Path)
     assert f"##reference={fasta_path}" in header_text
 
 
-def test_header_reference_raises_on_missing_primary_contig(tmp_path: Path) -> None:
+def test_header_reference_raises_when_fewer_than_25_contigs(tmp_path: Path) -> None:
     fasta_path = tmp_path / "ref.fa"
-    fasta_path.write_text(">chr1\nACGT\n")
+    fasta_path.write_text(">chr1\nACGT\n>chrExtra\nGG\n")
     pysam.faidx(str(fasta_path))
     from cellme.vcf import ReferenceContigError
-    with pytest.raises(ReferenceContigError, match="not found in reference"):
+    with pytest.raises(ReferenceContigError, match="has 2 contigs"):
+        build_header(CONTEXT, "0.1.0", reference=fasta_path)
+
+
+def test_header_reference_raises_when_non_primary_in_first_25(tmp_path: Path) -> None:
+    lines = [">chrExtra\nACGT\n"]
+    for i in list(range(1, 23)) + ["X", "Y"]:
+        lines.append(f">chr{i}\nACGT\n")
+    lines.append(">chrM\nACGT\n")
+    fasta_path = tmp_path / "ref.fa"
+    fasta_path.write_text("".join(lines))
+    pysam.faidx(str(fasta_path))
+    from cellme.vcf import ReferenceContigError
+    with pytest.raises(ReferenceContigError, match="Expected primary-assembly contig"):
         build_header(CONTEXT, "0.1.0", reference=fasta_path)
 
 
@@ -597,7 +610,7 @@ def test_header_reference_raises_on_misordered_primary_contigs(tmp_path: Path) -
     fasta_path.write_text("".join(lines))
     pysam.faidx(str(fasta_path))
     from cellme.vcf import ReferenceContigError
-    with pytest.raises(ReferenceContigError, match="not in karyotype order"):
+    with pytest.raises(ReferenceContigError, match="Expected primary-assembly contig"):
         build_header(CONTEXT, "0.1.0", reference=fasta_path)
 
 
