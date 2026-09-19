@@ -117,6 +117,36 @@ InfoValue = str | int | bool
 """The value types cellme writes into a VCF INFO field."""
 
 
+def _percent_encode_info_value(value: InfoValue) -> InfoValue:
+    """
+    Percent-encode a VCF INFO field value per the VCF 4.3 specification.
+
+    Spaces, semicolons, equals signs, percent signs, and other reserved
+    characters are replaced with their percent-encoded equivalents so the
+    emitted INFO field is spec-compliant.
+
+    Args:
+        value: The INFO field value to encode.
+
+    Returns:
+        The value with reserved characters percent-encoded, or the original
+        value unchanged for non-string types.
+    """
+    if not isinstance(value, str):
+        return value
+    encoded: list[str] = []
+    for char in value:
+        if char in _INFO_RESERVED:
+            encoded.append(f"%{ord(char):02X}")
+        else:
+            encoded.append(char)
+    return "".join(encoded)
+
+
+_INFO_RESERVED: frozenset[str] = frozenset(" \t\n\r;=%,")
+"""Characters that must be percent-encoded in VCF INFO string values."""
+
+
 class TruthTrackError(Exception):
     """
     Base class for failures raised while building truth-track VCF records.
@@ -854,7 +884,7 @@ def _to_pysam_record(
         stop=stop,
         alleles=(record.reference_allele, record.alternate_allele),
         id=record.identifier,
-        info=dict(record.info),
+        info={k: _percent_encode_info_value(v) for k, v in record.info.items()},
     )
 
 

@@ -16,6 +16,7 @@ from cellme.vcf import ReferenceLookup
 from cellme.vcf import ReferenceMismatchError
 from cellme.vcf import TrackContext
 from cellme.vcf import VcfRecord
+from cellme.vcf import _percent_encode_info_value
 from cellme.vcf import build_header
 from cellme.vcf import build_record
 from cellme.vcf import build_records
@@ -724,3 +725,32 @@ def test_write_vcf_gz_path_is_bgzipped_and_tabix_indexed(tmp_path: Path) -> None
     assert (tmp_path / "molt4.vcf.gz.tbi").exists()
     with pysam.VariantFile(str(output)) as vcf:
         assert [record.info["GENE"] for record in vcf] == ["TP53"]
+
+
+def test_percent_encode_info_value_encodes_spaces() -> None:
+    assert (
+        _percent_encode_info_value("cBioPortal CCLE ccle_broad_2019")
+        == "cBioPortal%20CCLE%20ccle_broad_2019"
+    )
+
+
+def test_percent_encode_info_value_encodes_reserved_characters() -> None:
+    assert _percent_encode_info_value("a;b=c%d,e") == "a%3Bb%3Dc%25d%2Ce"
+
+
+def test_percent_encode_info_value_passes_through_non_strings() -> None:
+    assert _percent_encode_info_value(42) == 42
+    assert _percent_encode_info_value(True) is True
+
+
+def test_written_vcf_has_no_whitespace_in_info(tmp_path: Path) -> None:
+    records, header = _one_record_and_header()
+    output = tmp_path / "test.vcf"
+
+    write_vcf(records, header, output)
+
+    for line in output.read_text().splitlines():
+        if line.startswith("#"):
+            continue
+        info_field = line.split("\t")[7]
+        assert " " not in info_field, f"whitespace found in INFO: {info_field}"
