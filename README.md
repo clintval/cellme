@@ -1,4 +1,6 @@
-# cellme
+![Banner for cellme](https://raw.githubusercontent.com/clintval/cellme/main/.github/img/cellme_banner.svg)
+
+---
 
 [![PyPI version](https://img.shields.io/pypi/v/cellme)](https://pypi.org/project/cellme/)
 [![CI](https://github.com/clintval/cellme/actions/workflows/python_package.yml/badge.svg?branch=main)](https://github.com/clintval/cellme/actions/workflows/python_package.yml?query=branch%3Amain)
