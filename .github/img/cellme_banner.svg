@@ -1,0 +1,162 @@
+<svg width="1200" height="300" viewBox="0 0 1200 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="cellme: a vented culture flask of MOLT-4 cells in suspension resolves to the CCLE sample MOLT4_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE in the cBioPortal study ccle_broad_2019, and becomes a truth-track VCF of its 4,962 known mutations lifted from hg19 to hg38, such as NRAS:G12C, NOTCH1:L1600P and TP53:R306*">
+<defs>
+<pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="#75908c" stroke-width="1.1"/></pattern>
+</defs>
+<rect width="1200" height="300" fill="#dcebfa"/>
+<path d="M534,73 L534,91 L497,112 Q484,119 484,133 L484,249 Q484,259 494,259 L614,259 Q624,259 624,249 L624,133 Q624,119 611,112 L574,91 L574,73 Z" fill="url(#hatch)" transform="translate(7 9)"/>
+<path d="M525,54 L525,75 A29,6 0 0 0 583,75 L583,54 A29,6 0 0 0 525,54 Z" fill="url(#hatch)" transform="translate(7 9)"/>
+<path d="M534,73 L534,91 L497,112 Q484,119 484,133 L484,249 Q484,259 494,259 L614,259 Q624,259 624,249 L624,133 Q624,119 611,112 L574,91 L574,73 Z" fill="#f4f8fc" stroke="none"/>
+<path d="M488,188 Q506,184 524,188 T560,188 T596,188 Q610,185 620,188 L620,249 Q620,255 614,255 L494,255 Q488,255 488,249 Z" fill="#dcebfa"/>
+<path d="M488,188 Q506,184 524,188 T560,188 T596,188 Q610,185 620,188" fill="none" stroke="#75908c" stroke-width="1.3" stroke-linecap="round"/>
+<path d="M498,194 Q514,191 528,194" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M568,195 Q580,192 590,195" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round"/>
+<circle cx="493" cy="185" r="1.8" fill="#f4f8fc" stroke="#75908c" stroke-width="0.9"/>
+<circle cx="498.5" cy="183.5" r="1.2" fill="#f4f8fc" stroke="#75908c" stroke-width="0.9"/>
+<circle cx="588" cy="185.5" r="1.6" fill="#f4f8fc" stroke="#75908c" stroke-width="0.9"/>
+<g stroke="#75908c" stroke-width="1.1" stroke-linecap="round">
+<line x1="619" y1="243" x2="608" y2="243"/>
+<line x1="619" y1="235.4" x2="613" y2="235.4"/>
+<line x1="619" y1="227.8" x2="613" y2="227.8"/>
+<line x1="619" y1="220.2" x2="608" y2="220.2"/>
+<line x1="619" y1="212.6" x2="613" y2="212.6"/>
+<line x1="619" y1="205" x2="613" y2="205"/>
+<line x1="619" y1="197.4" x2="608" y2="197.4"/>
+<line x1="619" y1="189.8" x2="613" y2="189.8"/>
+<line x1="619" y1="182.2" x2="613" y2="182.2"/>
+<line x1="619" y1="174.6" x2="608" y2="174.6"/>
+<line x1="619" y1="167" x2="613" y2="167"/>
+<line x1="619" y1="159.4" x2="613" y2="159.4"/>
+<line x1="619" y1="151.8" x2="608" y2="151.8"/>
+<line x1="619" y1="144.2" x2="613" y2="144.2"/>
+<line x1="619" y1="136.6" x2="613" y2="136.6"/>
+</g>
+<text x="605" y="245.6" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="7.5" fill="#4c6d63" text-anchor="end">25</text>
+<text x="605" y="222.8" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="7.5" fill="#4c6d63" text-anchor="end">50</text>
+<text x="605" y="200" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="7.5" fill="#4c6d63" text-anchor="end">75</text>
+<text x="605" y="177.2" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="7.5" fill="#4c6d63" text-anchor="end">100</text>
+<text x="605" y="154.4" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="7.5" fill="#4c6d63" text-anchor="end">125</text>
+<text x="605" y="127" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="7.5" fill="#4c6d63" text-anchor="end">mL</text>
+<circle cx="506" cy="203" r="5.2" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="506.2" cy="204.1" r="2.2" fill="#26443a" opacity="0.55"/>
+<circle cx="514.5" cy="207" r="4.6" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="514.1" cy="206.1" r="1.9" fill="#26443a" opacity="0.55"/>
+<circle cx="509" cy="212.5" r="4.8" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="509.1" cy="213.6" r="2" fill="#26443a" opacity="0.55"/>
+<circle cx="518" cy="199" r="4.2" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="518.9" cy="199" r="1.8" fill="#26443a" opacity="0.55"/>
+<circle cx="554" cy="231" r="5" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="552.9" cy="230.7" r="2.1" fill="#26443a" opacity="0.55"/>
+<circle cx="562.5" cy="234" r="4.6" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="561.7" cy="234.6" r="1.9" fill="#26443a" opacity="0.55"/>
+<circle cx="558" cy="239.5" r="4.4" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="558.1" cy="240.5" r="1.8" fill="#26443a" opacity="0.55"/>
+<circle cx="542" cy="199" r="4.6" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="541" cy="199" r="1.9" fill="#26443a" opacity="0.55"/>
+<circle cx="548.6" cy="202.4" r="4.4" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="548" cy="201.6" r="1.8" fill="#26443a" opacity="0.55"/>
+<circle cx="575.5" cy="206.1" r="4" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="574.7" cy="205.9" r="1.7" fill="#26443a" opacity="0.55"/>
+<circle cx="506" cy="237.6" r="4.6" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="505.3" cy="236.9" r="1.9" fill="#26443a" opacity="0.55"/>
+<circle cx="498.5" cy="225.2" r="3.7" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="497.7" cy="224.9" r="1.5" fill="#26443a" opacity="0.55"/>
+<circle cx="542.9" cy="221.4" r="4.8" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="543.4" cy="220.5" r="2" fill="#26443a" opacity="0.55"/>
+<circle cx="567.1" cy="215.9" r="3.9" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="567.9" cy="215.7" r="1.6" fill="#26443a" opacity="0.55"/>
+<circle cx="536.6" cy="239.2" r="4.1" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="536.2" cy="240" r="1.7" fill="#26443a" opacity="0.55"/>
+<circle cx="514.6" cy="226.6" r="4.2" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="514.1" cy="227.4" r="1.8" fill="#26443a" opacity="0.55"/>
+<circle cx="529.6" cy="215" r="3.7" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="530.2" cy="214.5" r="1.6" fill="#26443a" opacity="0.55"/>
+<circle cx="575.3" cy="240" r="4.4" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="574.9" cy="240.9" r="1.8" fill="#26443a" opacity="0.55"/>
+<circle cx="586.7" cy="231" r="4.2" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="586.5" cy="230.1" r="1.8" fill="#26443a" opacity="0.55"/>
+<circle cx="522.6" cy="242.1" r="4.6" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="522.2" cy="241.1" r="1.9" fill="#26443a" opacity="0.55"/>
+<circle cx="593.7" cy="208.6" r="3.9" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<circle cx="593.4" cy="207.8" r="1.6" fill="#26443a" opacity="0.55"/>
+<path d="M538.5,73 L538.5,92.8 L499.7,116 Q488.5,121.7 488.5,133 L488.5,244.5 Q488.5,254.5 494,254.5 L614,254.5 Q619.5,254.5 619.5,244.5 L619.5,133 Q619.5,121.7 608.3,116 L569.5,92.8 L569.5,73" fill="none" stroke="#75908c" stroke-width="0.9" stroke-linejoin="round"/>
+<path d="M493.5,131 L493.5,173" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round"/>
+<path d="M493.5,191 L493.5,199" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round"/>
+<path d="M506,114 L528,101" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>
+<path d="M534,73 L534,91 L497,112 Q484,119 484,133 L484,249 Q484,259 494,259 L614,259 Q624,259 624,249 L624,133 Q624,119 611,112 L574,91 L574,73 Z" fill="none" stroke="#26443a" stroke-width="2.4" stroke-linejoin="round"/>
+<rect x="500" y="127" width="88" height="42" rx="4" fill="#ffffff" stroke="#75908c" stroke-width="1.1"/>
+<g transform="rotate(-4 544 148)">
+<text x="544" y="148" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-weight="bold" font-size="19" fill="#26443a" text-anchor="middle">MOLT-4</text>
+<path d="M512,154 Q540,150.5 560,153.5 T578,152" fill="none" stroke="#26443a" stroke-width="1.1" stroke-linecap="round"/>
+<text x="544" y="164" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="9.5" fill="#4c6d63" text-anchor="middle">human T-ALL</text>
+</g>
+<path d="M531,83 Q554,88 577,83 L577,87.5 Q554,92.5 531,87.5 Z" fill="#f4f8fc" stroke="#26443a" stroke-width="1.6" stroke-linejoin="round"/>
+<path d="M525,54 L525,75 A29,6 0 0 0 583,75 L583,54 A29,6 0 0 0 525,54 Z" fill="#4f7a6a" stroke="#26443a" stroke-width="2.2" stroke-linejoin="round"/>
+<line x1="526" y1="58.6" x2="526" y2="74.1" stroke="#26443a" stroke-width="0.9" stroke-linecap="round"/>
+<line x1="528.9" y1="60" x2="528.9" y2="75.5" stroke="#26443a" stroke-width="0.9" stroke-linecap="round"/>
+<line x1="533.5" y1="61.2" x2="533.5" y2="76.7" stroke="#26443a" stroke-width="0.9" stroke-linecap="round"/>
+<line x1="539.5" y1="62.2" x2="539.5" y2="77.7" stroke="#26443a" stroke-width="0.9" stroke-linecap="round"/>
+<line x1="546.5" y1="62.8" x2="546.5" y2="78.3" stroke="#26443a" stroke-width="0.9" stroke-linecap="round"/>
+<line x1="554" y1="63" x2="554" y2="78.5" stroke="#26443a" stroke-width="0.9" stroke-linecap="round"/>
+<line x1="561.5" y1="62.8" x2="561.5" y2="78.3" stroke="#26443a" stroke-width="0.9" stroke-linecap="round"/>
+<line x1="568.5" y1="62.2" x2="568.5" y2="77.7" stroke="#26443a" stroke-width="0.9" stroke-linecap="round"/>
+<line x1="574.5" y1="61.2" x2="574.5" y2="76.7" stroke="#26443a" stroke-width="0.9" stroke-linecap="round"/>
+<line x1="579.1" y1="60" x2="579.1" y2="75.5" stroke="#26443a" stroke-width="0.9" stroke-linecap="round"/>
+<line x1="582" y1="58.6" x2="582" y2="74.1" stroke="#26443a" stroke-width="0.9" stroke-linecap="round"/>
+<ellipse cx="554" cy="54" rx="29" ry="6" fill="#4f7a6a" stroke="#26443a" stroke-width="2"/>
+<ellipse cx="554" cy="54" rx="18" ry="3.4" fill="#f4f8fc" stroke="#26443a" stroke-width="1"/>
+<circle cx="544" cy="54" r="0.8" fill="#75908c"/>
+<circle cx="549" cy="54" r="0.8" fill="#75908c"/>
+<circle cx="554" cy="54" r="0.8" fill="#75908c"/>
+<circle cx="559" cy="54" r="0.8" fill="#75908c"/>
+<circle cx="564" cy="54" r="0.8" fill="#75908c"/>
+<path d="M654,139 L671,158 L654,177" fill="none" stroke="#26443a" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="703" y="63" width="450" height="200" rx="6" fill="url(#hatch)"/>
+<rect x="696" y="54" width="450" height="200" rx="6" fill="#f4f8fc"/>
+<rect x="696" y="54" width="450" height="200" rx="6" fill="none" stroke="#26443a" stroke-width="2.4"/>
+<text x="714" y="80" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#4c6d63">query</text>
+<text x="770" y="80" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a">MOLT-4</text>
+<text x="714" y="96" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#4c6d63">sample</text>
+<text x="770" y="96" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a">MOLT4_HAEMATOPOIETIC_AND_LYMPHOID_TISSUE</text>
+<text x="714" y="112" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#4c6d63">study</text>
+<text x="770" y="112" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a">ccle_broad_2019</text>
+<text x="1128" y="112.5" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#4c6d63" text-anchor="end">cBioPortal</text>
+<line x1="712" y1="127" x2="1130" y2="127" stroke="#75908c" stroke-width="1" stroke-dasharray="3 4" stroke-linecap="round"/>
+<text x="714" y="149" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#4c6d63">CHROM</text>
+<text x="760" y="149" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#4c6d63">POS</text>
+<text x="834" y="149" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#4c6d63">ID</text>
+<text x="936" y="149" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#4c6d63">REF</text>
+<text x="966" y="149" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#4c6d63">ALT</text>
+<text x="1004" y="149" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#4c6d63">ORIGINAL_LOCUS</text>
+<text x="714" y="169" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a">chr1</text>
+<text x="760" y="169" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a"><tspan fill="#3d7563">114716127</tspan></text>
+<text x="834" y="169" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a">NRAS:G12C</text>
+<text x="936" y="169" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a">C</text>
+<text x="966" y="169" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a">A</text>
+<text x="1004" y="169" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a"><tspan fill="#866429">chr1:115258748</tspan></text>
+<text x="714" y="187" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a">chr9</text>
+<text x="760" y="187" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a"><tspan fill="#3d7563">136504892</tspan></text>
+<text x="834" y="187" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a">NOTCH1:L1600P</text>
+<text x="936" y="187" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a">A</text>
+<text x="966" y="187" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a">G</text>
+<text x="1004" y="187" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a"><tspan fill="#866429">chr9:139399344</tspan></text>
+<text x="714" y="205" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a">chr17</text>
+<text x="760" y="205" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a"><tspan fill="#3d7563">7673704</tspan></text>
+<text x="834" y="205" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a">TP53:R306*</text>
+<text x="936" y="205" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a">G</text>
+<text x="966" y="205" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a">A</text>
+<text x="1004" y="205" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11" fill="#26443a"><tspan fill="#866429">chr17:7577022</tspan></text>
+<rect x="714" y="228" width="16" height="7" rx="2.6" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<text x="736" y="235" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#4c6d63">hg38</text>
+<rect x="780" y="228" width="16" height="7" rx="2.6" fill="#c9a56a" stroke="#26443a" stroke-width="1"/>
+<text x="802" y="235" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#4c6d63">hg19, before liftover</text>
+<text x="1128" y="235" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#4c6d63" text-anchor="end">4,962 known mutations</text>
+<g font-family="Georgia, 'Times New Roman', serif" fill="#26443a">
+<text x="96" y="150" font-size="100" letter-spacing="1">cellme</text>
+<path d="M102,186 Q250,178 398,184" fill="none" stroke="#26443a" stroke-width="1.6" stroke-linecap="round"/>
+<text x="250" y="216" text-anchor="middle" font-size="19" font-style="italic" fill="#4c6d63">Know thy cell line.</text>
+</g>
+<g font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="13.5" fill="#4c6d63">
+<text x="554" y="38" text-anchor="middle">a cell line</text>
+<text x="921" y="38" text-anchor="middle">its known mutations, as a truth-track VCF</text>
+</g>
+</svg>
